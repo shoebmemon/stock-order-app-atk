@@ -12,7 +12,7 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css?v=8">
     <style>
-      /* Style additions for the sub-navigation row on the Add Data page */
+      /* Layout additions for the Add Data sub-navigation */
       .sub-nav-tabs {
         display: flex;
         gap: 6px;
@@ -41,6 +41,47 @@
       .sub-page-view[hidden] {
         display: none;
       }
+
+      /* Styles for Search-as-you-type autocomplete dropdown */
+      .search-suggest-container {
+        position: relative;
+        width: 100%;
+      }
+      .search-suggestions-box {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+        z-index: 200;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        margin-top: 4px;
+        display: none;
+      }
+      .suggestion-item {
+        padding: 10px 14px;
+        cursor: pointer;
+        border-bottom: 1px solid var(--soft);
+        font-size: 0.95rem;
+        text-align: left;
+      }
+      .suggestion-item:last-child {
+        border-bottom: 0;
+      }
+      .suggestion-item:hover, .suggestion-item.selected {
+        background: var(--soft);
+        color: var(--primary);
+      }
+      .suggestion-item .vendor-tag {
+        font-size: 0.78rem;
+        color: var(--muted);
+        display: block;
+        margin-top: 2px;
+      }
     </style>
   </head>
   <body>
@@ -63,14 +104,18 @@
           <div class="section-heading">
             <div>
               <h2 id="orderTitle">Make Order List</h2>
-              <p>Select an item and quantity to add to your procurement registers.</p>
+              <p>Type to search your huge item catalog, select it, and choose quantity.</p>
             </div>
           </div>
 
-          <form id="orderForm" class="compact-form">
+          <form id="orderForm" class="compact-form" autocomplete="off">
             <label>
-              Stock item
-              <select id="orderItem" required></select>
+              Search & Select Stock Item
+              <div class="search-suggest-container">
+                <input id="orderItemSearchInput" type="text" placeholder="🔍 Type item name to filter..." required>
+                <input id="hiddenOrderItemId" type="hidden" required>
+                <div id="searchSuggestionsBox" class="search-suggestions-box"></div>
+              </div>
             </label>
             <label>
               Quantity to order
