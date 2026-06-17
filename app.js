@@ -1,20 +1,29 @@
-const STORAGE_KEY = "shop-stock-order-app-v5";
+const STORAGE_KEY = "shop-stock-order-app-v6";
+
+// Mobile-safe ID generator fallback
+function generateUUID() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  // Fallback for non-HTTPS mobile connections or older mobile browsers
+  return "id-" + Math.random().toString(36).slice(2, 11) + "-" + Date.now().toString(36);
+}
 
 const sampleState = {
   suppliers: [
-    { id: crypto.randomUUID(), name: "Sunrise Traders", email: "orders@sunrisetraders.example", phone: "9876543210" },
-    { id: crypto.randomUUID(), name: "City Wholesale", email: "sales@citywholesale.example", phone: "9123456780" },
-    { id: crypto.randomUUID(), name: "Fresh Pack Supplies", email: "", phone: "9000011122" }
+    { id: generateUUID(), name: "Sunrise Traders", email: "orders@sunrisetraders.example", phone: "9876543210" },
+    { id: generateUUID(), name: "City Wholesale", email: "sales@citywholesale.example", phone: "9123456780" },
+    { id: generateUUID(), name: "Fresh Pack Supplies", email: "", phone: "9000011122" }
   ],
   stocks: [],
   order: []
 };
 
 sampleState.stocks = [
-  { id: crypto.randomUUID(), name: "Basmati Rice 5kg", category: "Grocery", supplierId: sampleState.suppliers[0].id, unit: "bags" },
-  { id: crypto.randomUUID(), name: "Toor Dal 1kg", category: "Grocery", supplierId: sampleState.suppliers[0].id, unit: "packs" },
-  { id: crypto.randomUUID(), name: "Dishwash Liquid 500ml", category: "Cleaning", supplierId: sampleState.suppliers[1].id, unit: "bottles" },
-  { id: crypto.randomUUID(), name: "Paper Carry Bags Medium", category: "Packing", supplierId: sampleState.suppliers[2].id, unit: "bundles" }
+  { id: generateUUID(), name: "Basmati Rice 5kg", category: "Grocery", supplierId: sampleState.suppliers[0].id, unit: "bags" },
+  { id: generateUUID(), name: "Toor Dal 1kg", category: "Grocery", supplierId: sampleState.suppliers[0].id, unit: "packs" },
+  { id: generateUUID(), name: "Dishwash Liquid 500ml", category: "Cleaning", supplierId: sampleState.suppliers[1].id, unit: "bottles" },
+  { id: generateUUID(), name: "Paper Carry Bags Medium", category: "Packing", supplierId: sampleState.suppliers[2].id, unit: "bundles" }
 ];
 
 let state = loadState();
@@ -57,7 +66,6 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-// Global lookup helpers
 function supplierName(id) {
   return state.suppliers.find((supplier) => supplier.id === id)?.name || "No supplier";
 }
@@ -78,7 +86,7 @@ function formatUnit(value) {
 
 function normalizeStockItem(item) {
   return {
-    id: item.id || crypto.randomUUID(),
+    id: item.id || generateUUID(),
     name: item.name || "",
     category: item.category || "",
     supplierId: item.supplierId || "",
@@ -112,7 +120,6 @@ function showPage(pageId) {
   }
 }
 
-// Added logic to shift inner tab panels inside the Add Data page view
 function showSubPage(subPageId) {
   el.subPageViews.forEach((view) => {
     view.hidden = view.id !== subPageId;
@@ -277,7 +284,7 @@ function addOrUpdateOrderLine(item, quantity, note = "") {
     existing.note = note || existing.note;
   } else {
     state.order.push({
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       supplierId: item.supplierId,
       itemId: item.id,
       quantity: Number(quantity),
@@ -303,7 +310,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-// Inner tab click handlers
 el.subTabButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     showSubPage(btn.dataset.subTarget);
@@ -313,7 +319,7 @@ el.subTabButtons.forEach((btn) => {
 el.stockForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.stocks.push({
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     name: document.querySelector("#itemName").value.trim(),
     category: document.querySelector("#itemCategory").value.trim(),
     supplierId: el.itemSupplier.value,
@@ -328,7 +334,7 @@ el.stockForm.addEventListener("submit", (event) => {
 el.supplierForm.addEventListener("submit", (event) => {
   event.preventDefault();
   state.suppliers.push({
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     name: document.querySelector("#supplierName").value.trim(),
     email: document.querySelector("#supplierEmail").value.trim(),
     phone: document.querySelector("#supplierPhone").value.trim().replace(/[^0-9+]/g, "")
