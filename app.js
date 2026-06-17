@@ -1,11 +1,10 @@
-const STORAGE_KEY = "shop-stock-order-app-v6";
+const STORAGE_KEY = "shop-stock-order-app-v7";
 
-// Mobile-safe ID generator fallback
+// Safe dynamic mobile ID generation tool
 function generateUUID() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  // Fallback for non-HTTPS mobile connections or older mobile browsers
   return "id-" + Math.random().toString(36).slice(2, 11) + "-" + Date.now().toString(36);
 }
 
@@ -36,7 +35,9 @@ const el = {
   supplierList: document.querySelector("#supplierList"),
   bifurcatedOrderContainer: document.querySelector("#bifurcatedOrderContainer"),
   itemSupplier: document.querySelector("#itemSupplier"),
-  orderItem: document.querySelector("#orderItem"),
+  orderItemSearchInput: document.querySelector("#orderItemSearchInput"),
+  hiddenOrderItemId: document.querySelector("#hiddenOrderItemId"),
+  searchSuggestionsBox: document.querySelector("#searchSuggestionsBox"),
   supplierFilter: document.querySelector("#supplierFilter"),
   stockSearch: document.querySelector("#stockSearch"),
   recentOrderAlert: document.querySelector("#recentOrderAlert"),
@@ -98,7 +99,6 @@ function render() {
   renderSupplierOptions();
   renderStockTable();
   renderSupplierList();
-  renderAllOrderItems();
   renderBifurcatedOrders();
 }
 
@@ -210,18 +210,39 @@ function renderSupplierList() {
     .join("");
 }
 
-function renderAllOrderItems() {
-  if (!state.stocks.length) {
-    el.orderItem.innerHTML = `<option value="">No stock items available. Add some first!</option>`;
+// Search-as-you-type filter handler for massive stock lists
+function handleSearchInput() {
+  const query = el.orderItemSearchInput.value.trim().toLowerCase();
+  
+  if (!query) {
+    el.searchSuggestionsBox.style.display = "none";
     return;
   }
 
-  el.orderItem.innerHTML = state.stocks
+  const matches = state.stocks.filter((item) => 
+    item.name.toLowerCase().includes(query) || 
+    supplierName(item.supplierId).toLowerCase().includes(query)
+  );
+
+  if (!matches.length) {
+    el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item subtle">No items match your search.</div>`;
+    el.searchSuggestionsBox.style.display = "block";
+    return;
+  }
+
+  el.searchSuggestionsBox.innerHTML = matches
     .map((item) => {
-      const vendorName = supplierName(item.supplierId);
-      return `<option value="${item.id}">${escapeHtml(item.name)} (${escapeHtml(vendorName)})</option>`;
+      const vendor = supplierName(item.supplierId);
+      return `
+        <div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}">
+          <strong>${escapeHtml(item.name)}</strong>
+          <span class="vendor-tag">Supplier: ${escapeHtml(vendor)}</span>
+        </div>
+      `;
     })
     .join("");
+  
+  el.searchSuggestionsBox.style.display = "block";
 }
 
 function renderBifurcatedOrders() {
@@ -310,11 +331,32 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+// Inner Tab Selector Controls
 el.subTabButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     showSubPage(btn.dataset.subTarget);
   });
 });
+
+// Autocomplete Selection Event
+el.searchSuggestionsBox.addEventListener("click", (event) => {
+  const suggestionItem = event.target.closest(".suggestion-item");
+  if (!suggestionItem || !suggestionItem.dataset.id) return;
+
+  el.orderItemSearchInput.value = suggestionItem.dataset.name;
+  el.hiddenOrderItemId.value = suggestionItem.dataset.id;
+  el.searchSuggestionsBox.style.display = "none";
+});
+
+// Hide autocomplete popup if user clicks away
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".search-suggest-container")) {
+    el.searchSuggestionsBox.style.display = "none";
+  }
+});
+
+el.orderItemSearchInput.addEventListener("input", handleSearchInput);
+el.orderItemSearchInput.addEventListener("focus", handleSearchInput);
 
 el.stockForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -346,8 +388,15 @@ el.supplierForm.addEventListener("submit", (event) => {
 
 el.orderForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const item = state.stocks.find((stock) => stock.id === el.orderItem.value);
-  if (!item) return;
+  
+  const selectedItemId = el.hiddenOrderItemId.value;
+  const item = state.stocks.find((stock) => stock.id === selectedItemId);
+  
+  // Validation guard if user typed random gibberish without choosing a suggested option
+  if (!item || el.orderItemSearchInput.value !== item.name) {
+    alert("Please select a valid item from the search suggestion pop-up menu list.");
+    return;
+  }
 
   const qty = document.querySelector("#orderQty").value;
   const note = document.querySelector("#orderNote").value.trim();
@@ -355,8 +404,10 @@ el.orderForm.addEventListener("submit", (event) => {
   addOrUpdateOrderLine(item, qty, note);
   saveState();
 
+  // Reset order entry panel smoothly
+  el.orderForm.reset();
+  el.hiddenOrderItemId.value = "";
   document.querySelector("#orderQty").value = 1;
-  document.querySelector("#orderNote").value = "";
 
   el.recentOrderAlert.innerHTML = `
     <div style="background: var(--ok-bg); color: var(--ok-text); padding: 12px; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(36,113,58,0.15)">
@@ -383,7 +434,11 @@ el.stockTable.addEventListener("click", (event) => {
     const item = state.stocks.find((stock) => stock.id === id);
     if (!item) return;
     addOrUpdateOrderLine(item, 1);
-    el.orderItem.value = item.id;
+    
+    // Auto-fill form details directly
+    el.orderItemSearchInput.value = item.name;
+    el.hiddenOrderItemId.value = item.id;
+    
     el.recentOrderAlert.innerHTML = `
       <div style="background: var(--ok-bg); color: var(--ok-text); padding: 12px; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(36,113,58,0.15)">
         ✔ Added: ${escapeHtml(item.name)} (Qty: 1)
@@ -417,6 +472,7 @@ document.addEventListener("click", (event) => {
     const textMessage = `Hello ${supplier.name},\n\nPlease arrange delivery for the following purchase items:\n\n${itemsText}\n\nThank you.`;
     const cleanPhone = (supplier.phone || "").replace(/[^0-9]/g, "");
     
+    window.open:// Trigger native app target paths safely
     window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(textMessage)}`, "_blank");
   }
 
@@ -461,7 +517,6 @@ function initializeApp() {
   }
   renderStockTable();
   renderSupplierList();
-  renderAllOrderItems();
   renderBifurcatedOrders();
 }
 
