@@ -22,7 +22,7 @@
 
     <nav class="page-tabs" aria-label="App pages">
       <button class="tab-button active" type="button" data-page-target="orderPage">Order List</button>
-      <button class="tab-button" type="button" data-page-target="dispatchPage">Direct Dispatch</button>
+      <button class="tab-button" type="button" data-page-target="orderDetailsPage">Order Details</button>
       <button class="tab-button" type="button" data-page-target="stockPage">Stock Details</button>
       <button class="tab-button" type="button" data-page-target="supplierPage">Supplier Details</button>
       <button class="tab-button" type="button" data-page-target="dataPage">Data</button>
@@ -34,7 +34,7 @@
           <div class="section-heading">
             <div>
               <h2 id="orderTitle">Make Order List</h2>
-              <p>Select item and quantity. Items will be grouped by supplier automatically.</p>
+              <p>Select an item and quantity to add to your procurement registers.</p>
             </div>
           </div>
 
@@ -54,117 +54,72 @@
             <button class="primary" type="submit">Add To Order</button>
           </form>
 
-          <div id="recentOrderAlert" style="margin: 14px 0; display: none;"></div>
-
-          <div id="orderList" class="order-list"></div>
-
-          <div class="order-actions sticky-actions">
-            <button id="printPdfBtn" class="primary" type="button">Show PDF Preview</button>
-            <button id="sharePdfBtn" class="secondary" type="button">Share PDF</button>
-            <button id="emailBtn" class="secondary" type="button">Email Supplier</button>
-          </div>
-          <div id="pdfPreview" class="pdf-preview" hidden>
-            <div class="pdf-preview-head">
-              <strong>PDF Preview</strong>
-              <a id="pdfDownloadLink" class="secondary download-link" href="#" download="order-list.pdf">Download PDF File</a>
-            </div>
-            <iframe id="pdfFrame" title="Order PDF preview"></iframe>
-          </div>
+          <div id="recentOrderAlert" style="margin-top: 16px; display: none;"></div>
         </div>
       </section>
 
-      <section id="dispatchPage" class="page" aria-labelledby="dispatchTitle" hidden>
+      <section id="orderDetailsPage" class="page" aria-labelledby="orderDetailsTitle" hidden>
         <div class="panel order-panel">
           <div class="section-heading">
             <div>
-              <h2 id="dispatchTitle">Direct Dispatch Manager</h2>
-              <p>Build and send separate order streams quickly without touching your main wishlist logs.</p>
+              <h2 id="orderDetailsTitle">Order Details</h2>
+              <p>Active lists bifurcated cleanly per vendor/supplier.</p>
             </div>
           </div>
-
-          <form id="dispatchForm" class="compact-form">
-            <label>
-              Stock item
-              <select id="dispatchOrderItem" required></select>
-            </label>
-            <label>
-              Quantity to order
-              <input id="dispatchOrderQty" type="number" min="1" step="1" value="1" required>
-            </label>
-            <label>
-              Note
-              <input id="dispatchOrderNote" placeholder="Optional">
-            </label>
-            <button class="primary" type="submit">Add to Separate Order</button>
-          </form>
-
-          <div id="dispatchRecentOrderAlert" style="margin: 14px 0; display: none;"></div>
-
-          <div id="dispatchOrderList" class="order-list" style="margin-top: 20px;"></div>
-
-          <div class="order-actions sticky-actions">
-            <button id="dispatchPrintPdfBtn" class="primary" type="button">Preview Separate PDF</button>
-            <button id="dispatchEmailBtn" class="secondary" type="button">Email Supplier Separately</button>
-          </div>
-          <div id="dispatchPdfPreview" class="pdf-preview" hidden>
-            <div class="pdf-preview-head">
-              <strong>Separate Order PDF Preview</strong>
-              <a id="dispatchPdfDownloadLink" class="secondary download-link" href="#" download="separate-order.pdf">Download File</a>
-            </div>
-            <iframe id="dispatchPdfFrame" title="Separate Order PDF preview"></iframe>
-          </div>
+          
+          <div id="bifurcatedOrderContainer" class="order-list"></div>
         </div>
       </section>
 
       <section id="stockPage" class="page" aria-labelledby="inventoryTitle" hidden>
-      <div class="panel inventory-panel">
-        <div class="section-heading">
-          <div>
-            <h2 id="inventoryTitle">Stock Details</h2>
-            <p>Add items once, then pick them later when you need to order.</p>
+        <div class="panel inventory-panel">
+          <div class="section-heading">
+            <div>
+              <h2 id="inventoryTitle">Stock Details</h2>
+              <p>Add items once, then pick them later when you need to order.</p>
+            </div>
+            <button id="resetDemoBtn" class="secondary danger-soft" type="button">Reset Sample</button>
           </div>
-          <button id="resetDemoBtn" class="secondary danger-soft" type="button">Reset Sample</button>
-        </div>
 
-        <form id="stockForm" class="form-grid">
-          <label>
-            Item name
-            <input id="itemName" required placeholder="e.g. Basmati Rice 5kg">
-          </label>
-          <label>
-            Category
-            <input id="itemCategory" placeholder="e.g. Grocery">
-          </label>
-          <label>
-            Supplier
-            <select id="itemSupplier" required></select>
-          </label>
-          <label>
-            Unit
-            <input id="itemUnit" placeholder="pcs, packs, bags, kg" value="pcs" required>
-          </label>
-          <button class="primary full-row" type="submit">Save Stock Item</button>
-        </form>
+          <form id="stockForm" class="form-grid">
+            <label>
+              Item name
+              <input id="itemName" required placeholder="e.g. Basmati Rice 5kg">
+            </label>
+            <label>
+              Category
+              <input id="itemCategory" placeholder="e.g. Grocery">
+            </label>
+            <label>
+              Supplier
+              <select id="itemSupplier" required></select>
+            </label>
+            <label>
+              Unit
+              <input id="itemUnit" placeholder="pcs, packs, bags, kg" value="pcs" required>
+            </label>
+            <button class="primary full-row" type="submit">Save Stock Item</button>
+          </form>
 
-        <div class="toolbar">
-          <input id="stockSearch" placeholder="Search stock items">
-          <select id="supplierFilter" aria-label="Filter by supplier"></select>
-        </div>
+          <div class="toolbar">
+            <input id="stockSearch" placeholder="Search stock items">
+            <select id="supplierFilter" aria-label="Filter by supplier"></select>
+          </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Supplier</th>
-                <th>Unit</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="stockTable"></tbody>
-          </table>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Supplier</th>
+                  <th>Unit</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="stockTable"></tbody>
+            </table>
+          </div>
         </div>
-      </div>
       </section>
 
       <section id="supplierPage" class="page" aria-labelledby="supplierTitle" hidden>
@@ -214,7 +169,6 @@
     </main>
 
     <section id="printArea" class="print-area" aria-hidden="true"></section>
-
     <script src="app.js?v=8"></script>
   </body>
 </html>
