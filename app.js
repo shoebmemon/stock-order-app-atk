@@ -1,6 +1,6 @@
-const STORAGE_KEY = "shop-stock-order-app-v10";
+const STORAGE_KEY = "shop-stock-order-app-v9";
 
-// Mobile safe unique ID fallback handler
+// Safe dynamic mobile ID generation tool
 function generateUUID() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -38,6 +38,7 @@ const el = {
   orderItemSearchInput: document.querySelector("#orderItemSearchInput"),
   hiddenOrderItemId: document.querySelector("#hiddenOrderItemId"),
   searchSuggestionsBox: document.querySelector("#searchSuggestionsBox"),
+  orderQty: document.querySelector("#orderQty"),
   supplierFilter: document.querySelector("#supplierFilter"),
   stockSearch: document.querySelector("#stockSearch"),
   recentOrderAlert: document.querySelector("#recentOrderAlert"),
@@ -335,7 +336,7 @@ el.subTabButtons.forEach((btn) => {
   });
 });
 
-// Autocomplete Dropdown Selection Fix
+// Autocomplete Selection Logic With Auto-Focus Shift
 el.searchSuggestionsBox.addEventListener("click", (event) => {
   const suggestionItem = event.target.closest(".suggestion-item");
   if (!suggestionItem || !suggestionItem.dataset.id) return;
@@ -343,8 +344,12 @@ el.searchSuggestionsBox.addEventListener("click", (event) => {
   el.orderItemSearchInput.value = suggestionItem.dataset.name;
   el.hiddenOrderItemId.value = suggestionItem.dataset.id;
   
-  // Forces the suggestion window to clear out and close immediately
+  // 1. Hide the box instantly
   el.searchSuggestionsBox.style.display = "none";
+  
+  // 2. FIX: Automatically jump the user's cursor focus directly to the quantity field
+  el.orderQty.focus();
+  el.orderQty.select(); // Highlight the default '1' for fast replacement typing
 });
 
 document.addEventListener("click", (event) => {
@@ -395,14 +400,14 @@ el.orderForm.addEventListener("submit", (event) => {
     return;
   }
 
-  const qty = document.querySelector("#orderQty").value;
+  const qty = el.orderQty.value;
 
   addOrUpdateOrderLine(item, qty);
   saveState();
 
   el.orderForm.reset();
   el.hiddenOrderItemId.value = "";
-  document.querySelector("#orderQty").value = 1;
+  el.orderQty.value = 1;
 
   el.recentOrderAlert.innerHTML = `
     <div style="background: var(--ok-bg); color: var(--ok-text); padding: 12px; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(36,113,58,0.15)">
