@@ -1,6 +1,6 @@
-const STORAGE_KEY = "shop-stock-order-app-v9";
+const STORAGE_KEY = "shop-stock-order-app-v10";
 
-// Safe dynamic mobile ID generation tool
+// Mobile safe unique ID fallback handler
 function generateUUID() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -77,7 +77,6 @@ function keepSelectValue(select, value) {
   }
 }
 
-// Format logic matching standard shop context formats
 function formatNumber(value) {
   return Number(value || 0).toLocaleString("en-IN");
 }
@@ -336,7 +335,7 @@ el.subTabButtons.forEach((btn) => {
   });
 });
 
-// Autocomplete Dropdown Row Tap Binding - NOW EXPLICITLY CLOSES ON CLICK
+// Autocomplete Dropdown Selection Fix
 el.searchSuggestionsBox.addEventListener("click", (event) => {
   const suggestionItem = event.target.closest(".suggestion-item");
   if (!suggestionItem || !suggestionItem.dataset.id) return;
@@ -344,7 +343,7 @@ el.searchSuggestionsBox.addEventListener("click", (event) => {
   el.orderItemSearchInput.value = suggestionItem.dataset.name;
   el.hiddenOrderItemId.value = suggestionItem.dataset.id;
   
-  // FIX: Force layout container box to close immediately on item selection
+  // Forces the suggestion window to clear out and close immediately
   el.searchSuggestionsBox.style.display = "none";
 });
 
