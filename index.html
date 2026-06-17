@@ -22,6 +22,7 @@
 
     <nav class="page-tabs" aria-label="App pages">
       <button class="tab-button active" type="button" data-page-target="orderPage">Order List</button>
+      <button class="tab-button" type="button" data-page-target="dispatchPage">Direct Dispatch</button>
       <button class="tab-button" type="button" data-page-target="stockPage">Stock Details</button>
       <button class="tab-button" type="button" data-page-target="supplierPage">Supplier Details</button>
       <button class="tab-button" type="button" data-page-target="dataPage">Data</button>
@@ -53,6 +54,8 @@
             <button class="primary" type="submit">Add To Order</button>
           </form>
 
+          <div id="recentOrderAlert" style="margin: 14px 0; display: none;"></div>
+
           <div id="orderList" class="order-list"></div>
 
           <div class="order-actions sticky-actions">
@@ -66,6 +69,49 @@
               <a id="pdfDownloadLink" class="secondary download-link" href="#" download="order-list.pdf">Download PDF File</a>
             </div>
             <iframe id="pdfFrame" title="Order PDF preview"></iframe>
+          </div>
+        </div>
+      </section>
+
+      <section id="dispatchPage" class="page" aria-labelledby="dispatchTitle" hidden>
+        <div class="panel order-panel">
+          <div class="section-heading">
+            <div>
+              <h2 id="dispatchTitle">Direct Dispatch Manager</h2>
+              <p>Build and send separate order streams quickly without touching your main wishlist logs.</p>
+            </div>
+          </div>
+
+          <form id="dispatchForm" class="compact-form">
+            <label>
+              Stock item
+              <select id="dispatchOrderItem" required></select>
+            </label>
+            <label>
+              Quantity to order
+              <input id="dispatchOrderQty" type="number" min="1" step="1" value="1" required>
+            </label>
+            <label>
+              Note
+              <input id="dispatchOrderNote" placeholder="Optional">
+            </label>
+            <button class="primary" type="submit">Add to Separate Order</button>
+          </form>
+
+          <div id="dispatchRecentOrderAlert" style="margin: 14px 0; display: none;"></div>
+
+          <div id="dispatchOrderList" class="order-list" style="margin-top: 20px;"></div>
+
+          <div class="order-actions sticky-actions">
+            <button id="dispatchPrintPdfBtn" class="primary" type="button">Preview Separate PDF</button>
+            <button id="dispatchEmailBtn" class="secondary" type="button">Email Supplier Separately</button>
+          </div>
+          <div id="dispatchPdfPreview" class="pdf-preview" hidden>
+            <div class="pdf-preview-head">
+              <strong>Separate Order PDF Preview</strong>
+              <a id="dispatchPdfDownloadLink" class="secondary download-link" href="#" download="separate-order.pdf">Download File</a>
+            </div>
+            <iframe id="dispatchPdfFrame" title="Separate Order PDF preview"></iframe>
           </div>
         </div>
       </section>
