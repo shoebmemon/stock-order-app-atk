@@ -1,10 +1,10 @@
-const STORAGE_KEY = "shop-stock-order-app-v3";
+const STORAGE_KEY = "shop-stock-order-app-v4";
 
 const sampleState = {
   suppliers: [
-    { id: crypto.randomUUID(), name: "Sunrise Traders", email: "orders@sunrisetraders.example", phone: "+91 98765 43210" },
-    { id: crypto.randomUUID(), name: "City Wholesale", email: "sales@citywholesale.example", phone: "+91 91234 56780" },
-    { id: crypto.randomUUID(), name: "Fresh Pack Supplies", email: "", phone: "+91 90000 11122" }
+    { id: crypto.randomUUID(), name: "Sunrise Traders", email: "orders@sunrisetraders.example", phone: "9876543210" },
+    { id: crypto.randomUUID(), name: "City Wholesale", email: "sales@citywholesale.example", phone: "9123456780" },
+    { id: crypto.randomUUID(), name: "Fresh Pack Supplies", email: "", phone: "9000011122" }
   ],
   stocks: [],
   order: []
@@ -31,6 +31,8 @@ const el = {
   supplierFilter: document.querySelector("#supplierFilter"),
   stockSearch: document.querySelector("#stockSearch"),
   recentOrderAlert: document.querySelector("#recentOrderAlert"),
+  addDataDropdownBtn: document.querySelector("#addDataDropdownBtn"),
+  addDataDropdownMenu: document.querySelector("#addDataDropdownMenu"),
   pages: document.querySelectorAll(".page"),
   tabButtons: document.querySelectorAll(".tab-button")
 };
@@ -103,6 +105,14 @@ function showPage(pageId) {
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-current", isActive ? "page" : "false");
   });
+
+  // Track state highlight changes for dropdown trigger highlights
+  const insideMenuButtons = ["stockPage", "supplierPage", "dataPage"];
+  if (insideMenuButtons.includes(pageId)) {
+    el.addDataDropdownBtn.classList.add("active");
+  } else {
+    el.addDataDropdownBtn.classList.remove("active");
+  }
 
   if (location.hash !== `#${pageId}`) {
     history.replaceState(null, "", `#${pageId}`);
@@ -180,7 +190,7 @@ function renderSupplierList() {
         <div class="supplier-card">
           <div>
             <strong>${escapeHtml(supplier.name)}</strong>
-            <div class="supplier-meta">${escapeHtml(supplier.email || "No email saved")} · ${escapeHtml(supplier.phone || "No phone saved")}</div>
+            <div class="supplier-meta">Email: ${escapeHtml(supplier.email || "None")} · Phone: ${escapeHtml(supplier.phone || "None")}</div>
             <div class="supplier-meta">${count} stock item${count === 1 ? "" : "s"}</div>
           </div>
         </div>
@@ -240,8 +250,8 @@ function renderBifurcatedOrders() {
 
       return `
         <div class="supplier-order-group" style="margin-bottom: 24px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #fafbfc;">
-          <h3 style="margin: 0 0 12px 0; color: var(--primary); font-size: 1.1rem; border-bottom: 2px solid var(--line); padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-            <span>📦 ${escapeHtml(vendorName)} (${lines.length} items)</span>
+          <h3 style="margin: 0 0 12px 0; color: var(--primary); font-size: 1.1rem; border-bottom: 2px solid var(--line); padding-bottom: 6px;">
+            📦 ${escapeHtml(vendorName)} (${lines.length} items)
           </h3>
           
           <div style="margin-bottom: 14px;">${rowsHtml}</div>
@@ -272,17 +282,12 @@ function addOrUpdateOrderLine(item, quantity, note = "") {
   }
 }
 
-function buildOrderShareText(supplierId) {
-  const supplier = state.suppliers.find((s) => s.id === supplierId);
+function buildCleanTextPayload(supplierId) {
   const lines = state.order.filter((line) => line.supplierId === supplierId);
-  if (!supplier) return "";
-
-  const linesText = lines.map((line, idx) => {
+  return lines.map((line, idx) => {
     const item = state.stocks.find((s) => s.id === line.itemId);
     return `${idx + 1}. ${item?.name || "Item"} - ${line.quantity} ${item?.unit || ""}${line.note ? ` (${line.note})` : ""}`;
   }).join("\n");
-
-  return `Purchase Order List\nSupplier: ${supplier.name}\n\nItems:\n${linesText}\n\nThank you.`;
 }
 
 function escapeHtml(value) {
@@ -294,14 +299,21 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function escapePdfText(value) {
-  return String(value || "").replace(/[^\x20-\x7E]/g, " ").replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
-}
+// Dropdown interface interaction toggle
+el.addDataDropdownBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  el.addDataDropdownMenu.classList.toggle("show");
+});
 
-function truncateText(value, maxLength) {
-  const text = String(value || "");
-  return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
-}
+document.addEventListener("click", () => {
+  el.addDataDropdownMenu.classList.remove("show");
+});
+
+el.addDataDropdownMenu.addEventListener("click", (event) => {
+  const targetBtn = event.target.closest("button[data-page-target]");
+  if (!targetBtn) return;
+  showPage(targetBtn.dataset.pageTarget);
+});
 
 el.stockForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -324,7 +336,7 @@ el.supplierForm.addEventListener("submit", (event) => {
     id: crypto.randomUUID(),
     name: document.querySelector("#supplierName").value.trim(),
     email: document.querySelector("#supplierEmail").value.trim(),
-    phone: document.querySelector("#supplierPhone").value.trim()
+    phone: document.querySelector("#supplierPhone").value.trim().replace(/[^0-9+]/g, "")
   });
   saveState();
   el.supplierForm.reset();
@@ -397,16 +409,25 @@ document.addEventListener("click", (event) => {
 
   if (action === "whatsapp-vendor") {
     const sId = button.dataset.supplierId;
-    const text = buildOrderShareText(sId);
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
+    const supplier = state.suppliers.find((s) => s.id === sId);
+    if (!supplier) return;
+    
+    const itemsText = buildCleanTextPayload(sId);
+    const textMessage = `Hello ${supplier.name},\n\nPlease arrange delivery for the following purchase items:\n\n${itemsText}\n\nThank you.`;
+    
+    // Grabs phone digits, defaulting clean tracking window routing if missing
+    const cleanPhone = (supplier.phone || "").replace(/[^0-9]/g, "");
+    window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(textMessage)}`, "_blank");
   }
 
   if (action === "email-vendor") {
     const sId = button.dataset.supplierId;
     const supplier = state.suppliers.find((s) => s.id === sId);
     if (!supplier) return;
-    const text = buildOrderShareText(sId);
-    window.location.href = `mailto:${encodeURIComponent(supplier.email || "")}?subject=${encodeURIComponent("Purchase Order Details")}&body=${encodeURIComponent(text)}`;
+    
+    const itemsText = buildCleanTextPayload(sId);
+    const emailBody = `Hello ${supplier.name},\n\nPlease process the following order for our shop:\n\n${itemsText}\n\nThank you.`;
+    window.location.href = `mailto:${encodeURIComponent(supplier.email || "")}?subject=${encodeURIComponent("Shop Purchase Order Request")}&body=${encodeURIComponent(emailBody)}`;
   }
 });
 
@@ -431,6 +452,9 @@ document.querySelector("#exportDataBtn").addEventListener("click", () => {
   link.download = "shop-stock-data.json";
   link.click();
 });
+
+document.querySelector("#exportCsvBtn").addEventListener("click", exportCsv);
+document.querySelector("#exportExcelBtn").addEventListener("click", exportExcel);
 
 function initializeApp() {
   renderSupplierOptions();
