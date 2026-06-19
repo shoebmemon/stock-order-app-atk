@@ -33,7 +33,9 @@ let focusedSupplierId = null;
 
 let longPressTimer = null;
 let isLongPressTriggered = false;
-const LONG_PRESS_DURATION = 600; 
+const LONG_PRESS_DURATION = 600;
+
+let selectedQuickOrderItem = null;
 
 const el = {
   stockForm: document.querySelector("#stockForm"),
@@ -42,7 +44,6 @@ const el = {
   stockTable: document.querySelector("#stockTable"),
   supplierList: document.querySelector("#supplierList"),
   bifurcatedOrderContainer: document.querySelector("#bifurcatedOrderContainer"),
-  itemSupplier: document.querySelector("#itemSupplier"),
   orderItemSearchInput: document.querySelector("#orderItemSearchInput"),
   hiddenOrderItemId: document.querySelector("#hiddenOrderItemId"),
   searchSuggestionsBox: document.querySelector("#searchSuggestionsBox"),
@@ -51,6 +52,11 @@ const el = {
   stockSearch: document.querySelector("#stockSearch"),
   recentOrderAlert: document.querySelector("#recentOrderAlert"),
   stockSubmitBtn: document.querySelector("#stockSubmitBtn"),
+  
+  // Autocomplete Supplier Nodes
+  stockSupplierSearchInput: document.querySelector("#stockSupplierSearchInput"),
+  hiddenStockSupplierId: document.querySelector("#hiddenStockSupplierId"),
+  supplierSuggestionsBox: document.querySelector("#supplierSuggestionsBox"),
   
   orderQtyInlineUnit: document.querySelector("#orderQtyInlineUnit"),
   
@@ -79,7 +85,25 @@ const el = {
   pages: document.querySelectorAll(".page"),
   tabButtons: document.querySelectorAll(".tab-button"),
   subTabButtons: document.querySelectorAll(".sub-tab-button"),
-  subPageViews: document.querySelectorAll(".sub-page-view")
+  subPageViews: document.querySelectorAll(".sub-page-view"),
+
+  exportCsvBtn: document.querySelector("#exportCsvBtn"),
+  exportExcelBtn: document.querySelector("#exportExcelBtn"),
+  exportDataBtn: document.querySelector("#exportDataBtn"),
+  importDataInput: document.querySelector("#importDataInput"),
+
+  stockSearchSuggestionsBox: document.querySelector("#stockSearchSuggestionsBox"),
+  stockQuickOrderBar: document.querySelector("#stockQuickOrderBar"),
+  stockQuickOrderItemName: document.querySelector("#stockQuickOrderItemName"),
+  stockQuickOrderSupplierName: document.querySelector("#stockQuickOrderSupplierName"),
+  stockQuickOrderQty: document.querySelector("#stockQuickOrderQty"),
+  stockQuickOrderUnitLabel: document.querySelector("#stockQuickOrderUnitLabel"),
+  stockQuickOrderAddBtn: document.querySelector("#stockQuickOrderAddBtn"),
+  stockQuickOrderCancelBtn: document.querySelector("#stockQuickOrderCancelBtn"),
+  stockQuickOrderAlert: document.querySelector("#stockQuickOrderAlert"),
+
+  supplierSearchInput: document.querySelector("#supplierSearchInput"),
+  supplierSearchSuggestionsBox: document.querySelector("#supplierSearchSuggestionsBox")
 };
 
 function loadState() {
@@ -116,10 +140,81 @@ function formatNumber(value) {
   return Number(value || 0).toLocaleString("en-IN");
 }
 
-// Clear units tracking strings cleanly inside active form buffers
 function formatUnit(value) {
-  return String(value || "pcs").trim() || "pcs";
+  return String(value || "").trim();
 }
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
+function clearInlineUnitLabel() {
+  if (el.orderQtyInlineUnit) el.orderQtyInlineUnit.textContent = "";
+}
+
+function addOrUpdateOrderLine(item, qty) {
+  const quantity = Math.max(1, Number(qty) || 1);
+  const existingLine = state.order.find(
+    (line) => line.itemId === item.id && (line.status || "active") === "active"
+  );
+
+  if (existingLine) {
+    existingLine.quantity = Number(existingLine.quantity || 0) + quantity;
+  } else {
+    state.order.push({
+      id: generateUUID(),
+      itemId: item.id,
+      supplierId: item.supplierId,
+      quantity,
+      status: "active",
+      dateCreated: getFormattedDate()
+    });
+  }
+}
+
+function toggleActiveCompletedState(supplierId, newStatus) {
+  state.order.forEach((line) => {
+    if (line.supplierId === supplierId && (line.status || "active") !== newStatus) {
+      line.status = newStatus;
+    }
+  });
+  saveState();
+
+  if (el.deepView) el.deepView.style.display = "none";
+  if (el.masterView) el.masterView.style.display = "block";
+  renderBifurcatedOrders();
+}
+
+function buildCleanTextPayload(supplierId) {
+  const lines = state.order.filter(
+    (line) => line.supplierId === supplierId && (line.status || "active") === currentStatusFilter
+  );
+
+  return lines
+    .map((line) => {
+      const item = state.stocks.find((s) => s.id === line.itemId);
+      return `- ${item ? item.name : "Deleted item"}: ${formatNumber(line.quantity)} ${item?.unit || "pcs"}`;
+    })
+    .join("\n");
+}
+
+// Global filter state change tab handler
+document.querySelectorAll("[data-status-filter]").forEach((pill) => {
+  pill.addEventListener("click", () => {
+    if(el.pillActive) el.pillActive.classList.toggle("active", pill.id === "pillActive");
+    if(el.pillCompleted) el.pillCompleted.classList.toggle("active", pill.id === "pillCompleted");
+    currentStatusFilter = pill.dataset.statusFilter;
+    if (el.deepView) el.deepView.style.display = "none";
+    if (el.masterView) el.masterView.style.display = "block";
+    renderBifurcatedOrders();
+  });
+});
 
 function getFormattedDate() {
   return new Date().toLocaleDateString("en-IN", {
@@ -184,22 +279,14 @@ function showSubPage(subPageId) {
 }
 
 function renderSupplierOptions() {
-  if (!el.itemSupplier || !el.supplierFilter) return;
-  const selectedItemSupplier = el.itemSupplier.value;
+  if (!el.supplierFilter) return;
   const selectedFilterSupplier = el.supplierFilter.value;
-  const supplierOptions = state.suppliers
+  
+  el.supplierFilter.innerHTML = `<option value="all">All suppliers</option>` + state.suppliers
     .map((supplier) => `<option value="${supplier.id}">${escapeHtml(supplier.name)}</option>`)
     .join("");
 
-  el.itemSupplier.innerHTML = supplierOptions;
-  el.supplierFilter.innerHTML = `<option value="all">All suppliers</option>${supplierOptions}`;
-
-  keepSelectValue(el.itemSupplier, selectedItemSupplier);
   keepSelectValue(el.supplierFilter, selectedFilterSupplier || "all");
-
-  if (!state.suppliers.length) {
-    el.itemSupplier.innerHTML = `<option value="">Add supplier first</option>`;
-  }
 }
 
 function renderStockTable() {
@@ -222,7 +309,7 @@ function renderStockTable() {
       <tr>
         <td data-label="Item"><div class="item-name">${escapeHtml(item.name)}</div></td>
         <td data-label="Supplier">${escapeHtml(supplierName(item.supplierId))}</td>
-        <td data-label="Unit">${escapeHtml(formatUnit(item.unit))}</td>
+        <td data-label="Unit">${escapeHtml(item.unit || "pcs")}</td>
         <td data-label="Actions">
           <div class="row-actions">
             <button class="icon-btn mini-icon-btn" type="button" data-action="quick-order" data-id="${item.id}" title="Add to order">➕</button>
@@ -241,7 +328,17 @@ function renderSupplierList() {
     return;
   }
 
-  el.supplierList.innerHTML = state.suppliers
+  const query = (el.supplierSearchInput?.value || "").trim().toLowerCase();
+  const visibleSuppliers = query
+    ? state.suppliers.filter((supplier) => supplier.name.toLowerCase().includes(query))
+    : state.suppliers;
+
+  if (!visibleSuppliers.length) {
+    el.supplierList.innerHTML = `<div class="empty">No suppliers match your search.</div>`;
+    return;
+  }
+
+  el.supplierList.innerHTML = visibleSuppliers
     .map((supplier) => `
       <div class="supplier-card" style="border: 1px solid var(--line); padding: 12px; margin-bottom: 8px; border-radius: 6px; background:#fff;">
         <div>
@@ -287,6 +384,111 @@ function handleSearchInput() {
   el.searchSuggestionsBox.style.display = "block";
 }
 
+function handleStockSupplierSearch() {
+  if (!el.stockSupplierSearchInput || !el.supplierSuggestionsBox) return;
+  const query = el.stockSupplierSearchInput.value.trim().toLowerCase();
+  if (!query) {
+    el.supplierSuggestionsBox.style.display = "none";
+    return;
+  }
+
+  const matches = state.suppliers.filter((supplier) => 
+    supplier.name.toLowerCase().includes(query)
+  );
+
+  if (!matches.length) {
+    el.supplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers match your search.</div>`;
+    el.supplierSuggestionsBox.style.display = "block";
+    return;
+  }
+
+  el.supplierSuggestionsBox.innerHTML = matches
+    .map((supplier) => `
+      <div class="supplier-suggestion-item suggestion-item" data-id="${supplier.id}" data-name="${escapeHtml(supplier.name)}">
+        <strong>${escapeHtml(supplier.name)}</strong>
+      </div>
+    `).join("");
+  el.supplierSuggestionsBox.style.display = "block";
+}
+
+function handleSupplierListSearch() {
+  if (!el.supplierSearchInput || !el.supplierSearchSuggestionsBox) return;
+  const query = el.supplierSearchInput.value.trim().toLowerCase();
+  if (!query) {
+    el.supplierSearchSuggestionsBox.style.display = "none";
+    return;
+  }
+
+  const matches = state.suppliers.filter((supplier) =>
+    supplier.name.toLowerCase().includes(query)
+  );
+
+  if (!matches.length) {
+    el.supplierSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers match your search.</div>`;
+    el.supplierSearchSuggestionsBox.style.display = "block";
+    return;
+  }
+
+  el.supplierSearchSuggestionsBox.innerHTML = matches
+    .map((supplier) => `
+      <div class="suggestion-item" data-id="${supplier.id}" data-name="${escapeHtml(supplier.name)}">
+        <strong>${escapeHtml(supplier.name)}</strong>
+      </div>
+    `).join("");
+  el.supplierSearchSuggestionsBox.style.display = "block";
+}
+
+function handleStockSearchInput() {
+  if (!el.stockSearch || !el.stockSearchSuggestionsBox) return;
+  const query = el.stockSearch.value.trim().toLowerCase();
+  if (!query) {
+    el.stockSearchSuggestionsBox.style.display = "none";
+    return;
+  }
+
+  const matches = state.stocks.filter((item) =>
+    item.name.toLowerCase().includes(query) || supplierName(item.supplierId).toLowerCase().includes(query)
+  );
+
+  if (!matches.length) {
+    el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No items match your search.</div>`;
+    el.stockSearchSuggestionsBox.style.display = "block";
+    return;
+  }
+
+  el.stockSearchSuggestionsBox.innerHTML = matches
+    .map((item) => `
+      <div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}">
+        <strong>${escapeHtml(item.name)}</strong>
+        <span class="vendor-tag">Supplier: ${escapeHtml(supplierName(item.supplierId))}</span>
+      </div>
+    `).join("");
+  el.stockSearchSuggestionsBox.style.display = "block";
+}
+
+function selectQuickOrderItem(item) {
+  selectedQuickOrderItem = item;
+  if (el.stockSearch) el.stockSearch.value = item.name;
+  renderStockTable();
+
+  if (el.stockQuickOrderBar) el.stockQuickOrderBar.style.display = "flex";
+  if (el.stockQuickOrderItemName) el.stockQuickOrderItemName.textContent = item.name;
+  if (el.stockQuickOrderSupplierName) el.stockQuickOrderSupplierName.textContent = supplierName(item.supplierId);
+  if (el.stockQuickOrderUnitLabel) el.stockQuickOrderUnitLabel.textContent = item.unit || "pcs";
+
+  if (el.stockQuickOrderQty) {
+    el.stockQuickOrderQty.value = 1;
+    el.stockQuickOrderQty.focus();
+    el.stockQuickOrderQty.select();
+  }
+}
+
+function clearQuickOrderBar() {
+  selectedQuickOrderItem = null;
+  if (el.stockQuickOrderBar) el.stockQuickOrderBar.style.display = "none";
+  if (el.stockQuickOrderQty) el.stockQuickOrderQty.value = 1;
+}
+
 function renderBifurcatedOrders() {
   if (!el.bifurcatedOrderContainer) return;
   
@@ -309,7 +511,7 @@ function renderBifurcatedOrders() {
 
       return `
         <div class="single-line-row" data-supplier-id="${sId}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-          <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
+          <div class="vendor-title-wrapper">
             ${currentStatusFilter === 'completed' ? `<input type="checkbox" class="master-multi-delete-checkbox" data-supplier-id="${sId}">` : ''}
             <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
           </div>
@@ -357,6 +559,32 @@ function startMasterLongPress(e, row) {
 
 function cancelMasterLongPress() {
   if (longPressTimer) clearTimeout(longPressTimer);
+}
+
+if (el.bifurcatedOrderContainer) {
+  el.bifurcatedOrderContainer.addEventListener("click", (event) => {
+    if (isLongPressTriggered) {
+      isLongPressTriggered = false;
+      return;
+    }
+
+    if (event.target.classList.contains("master-multi-delete-checkbox")) {
+      return;
+    }
+
+    if (el.masterView && el.masterView.classList.contains("selection-active")) {
+      const targetCheckbox = event.target.closest(".single-line-row")?.querySelector(".master-multi-delete-checkbox");
+      if (targetCheckbox) {
+        targetCheckbox.checked = !targetCheckbox.checked;
+        updateMasterBulkDeleteToolbarState();
+      }
+      return;
+    }
+
+    const targetRow = event.target.closest(".single-line-row");
+    if (!targetRow) return;
+    openSupplierDeepView(targetRow.dataset.supplierId);
+  });
 }
 
 function setupDeepViewLongPressTriggers() {
@@ -454,7 +682,7 @@ function openSupplierDeepView(supplierId) {
             
             <div style="min-width: 0; flex: 1; margin-left: 2px;">
               <strong>${escapeHtml(item?.name || "Deleted item")}</strong>
-              <div class="order-meta" style="font-size: 0.85rem; color: var(--muted); margin-top: 2px;">Qty: ${formatNumber(line.quantity)} ${escapeHtml(item?.unit || "")}</div>
+              <div class="order-meta" style="font-size: 0.85rem; color: var(--muted); margin-top: 2px;">Qty: ${formatNumber(line.quantity)} ${escapeHtml(item?.unit || "pcs")}</div>
             </div>
             
             ${currentStatusFilter === 'active' ? `
@@ -492,91 +720,6 @@ function updateBulkDeleteToolbarState() {
     el.bulkDeleteToolbar.style.display = "none";
     if (el.deepView) el.deepView.classList.remove("selection-active");
   }
-}
-
-function toggleActiveCompletedState(supplierId, targetTargetStatus) {
-  state.order.forEach((line) => {
-    if (line.supplierId === supplierId && (line.status || "active") === currentStatusFilter) {
-      line.status = targetTargetStatus;
-    }
-  });
-  saveState();
-  if (el.deepView) el.deepView.style.display = "none";
-  if (el.masterView) el.masterView.style.display = "block";
-  renderBifurcatedOrders();
-}
-
-function addOrUpdateOrderLine(item, quantity) {
-  const existing = state.order.find((line) => line.itemId === item.id && (line.status || "active") === "active");
-  if (existing) {
-    existing.quantity = Number(existing.quantity) + Number(quantity);
-  } else {
-    state.order.push({
-      id: generateUUID(),
-      supplierId: item.supplierId,
-      itemId: item.id,
-      quantity: Number(quantity),
-      dateCreated: getFormattedDate(),
-      status: "active"
-    });
-  }
-}
-
-function clearInlineUnitLabel() {
-  if (el.orderQtyInlineUnit) {
-    el.orderQtyInlineUnit.textContent = "";
-  }
-}
-
-function buildCleanTextPayload(supplierId) {
-  const lines = state.order.filter((line) => line.supplierId === supplierId && (line.status || "active") === currentStatusFilter);
-  return lines.map((line, idx) => {
-    const item = state.stocks.find((s) => s.id === line.itemId);
-    return `${idx + 1}. ${item?.name || "Item"} - ${line.quantity} ${item?.unit || ""}`;
-  }).join("\n");
-}
-
-function escapeHtml(value) {
-  return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
-}
-
-// FIXED: Clean global status filters listener loop that doesn't trigger on list long presses
-document.querySelectorAll("[data-status-filter]").forEach((pill) => {
-  pill.addEventListener("click", () => {
-    if(el.pillActive) el.pillActive.classList.toggle("active", pill.id === "pillActive");
-    if(el.pillCompleted) el.pillCompleted.classList.toggle("active", pill.id === "pillCompleted");
-    currentStatusFilter = pill.dataset.statusFilter;
-    if (el.deepView) el.deepView.style.display = "none";
-    if (el.masterView) el.masterView.style.display = "block";
-    renderBifurcatedOrders();
-  });
-});
-
-if (el.bifurcatedOrderContainer) {
-  el.bifurcatedOrderContainer.addEventListener("click", (event) => {
-    // FIXED: Blocks selection active flag mutations when switching filter tabs layout view modes
-    if (isLongPressTriggered) {
-      isLongPressTriggered = false;
-      return;
-    }
-
-    if (event.target.classList.contains("master-multi-delete-checkbox")) {
-      return;
-    }
-
-    if (el.masterView && el.masterView.classList.contains("selection-active")) {
-      const targetCheckbox = event.target.closest(".single-line-row")?.querySelector(".master-multi-delete-checkbox");
-      if (targetCheckbox) {
-        targetCheckbox.checked = !targetCheckbox.checked;
-        updateMasterBulkDeleteToolbarState();
-      }
-      return;
-    }
-
-    const targetRow = event.target.closest(".single-line-row");
-    if (!targetRow) return;
-    openSupplierDeepView(targetRow.dataset.supplierId);
-  });
 }
 
 document.addEventListener("click", (event) => {
@@ -705,7 +848,7 @@ if (el.searchSuggestionsBox) {
     
     const selectedItem = state.stocks.find(s => s.id === suggestionItem.dataset.id);
     if (selectedItem && el.orderQtyInlineUnit) {
-      el.orderQtyInlineUnit.textContent = formatUnit(selectedItem.unit);
+      el.orderQtyInlineUnit.textContent = selectedItem.unit || "pcs";
     }
 
     el.searchSuggestionsBox.style.display = "none";
@@ -716,9 +859,33 @@ if (el.searchSuggestionsBox) {
   });
 }
 
+if (el.supplierSuggestionsBox) {
+  el.supplierSuggestionsBox.addEventListener("click", (event) => {
+    const suggestionItem = event.target.closest(".supplier-suggestion-item");
+    if (!suggestionItem || !suggestionItem.dataset.id) return;
+
+    if (el.stockSupplierSearchInput) el.stockSupplierSearchInput.value = suggestionItem.dataset.name;
+    if (el.hiddenStockSupplierId) el.hiddenStockSupplierId.value = suggestionItem.dataset.id;
+
+    el.supplierSuggestionsBox.style.display = "none";
+    if (document.querySelector("#itemUnit")) {
+      document.querySelector("#itemUnit").focus();
+    }
+  });
+}
+
 document.addEventListener("click", (event) => {
   if (el.searchSuggestionsBox && !event.target.closest(".search-suggest-container")) {
     el.searchSuggestionsBox.style.display = "none";
+  }
+  if (el.supplierSuggestionsBox && !event.target.closest(".search-suggest-container")) {
+    el.supplierSuggestionsBox.style.display = "none";
+  }
+  if (el.stockSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) {
+    el.stockSearchSuggestionsBox.style.display = "none";
+  }
+  if (el.supplierSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) {
+    el.supplierSearchSuggestionsBox.style.display = "none";
   }
 });
 
@@ -732,12 +899,22 @@ if (el.orderItemSearchInput) {
   el.orderItemSearchInput.addEventListener("focus", handleSearchInput);
 }
 
+if (el.stockSupplierSearchInput) {
+  el.stockSupplierSearchInput.addEventListener("input", handleStockSupplierSearch);
+  el.stockSupplierSearchInput.addEventListener("focus", handleStockSupplierSearch);
+}
+
 if (el.stockForm) {
   el.stockForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const name = document.querySelector("#itemName").value.trim();
-    const supplierId = el.itemSupplier.value;
+    const supplierId = el.hiddenStockSupplierId.value;
     const unit = formatUnit(document.querySelector("#itemUnit").value);
+
+    if (!supplierId || el.stockSupplierSearchInput.value.trim() === "") {
+      alert("Please select a valid supplier party from the autocomplete search suggestions menu list popup first.");
+      return;
+    }
 
     if (editingStockId) {
       const stockItem = state.stocks.find((item) => item.id === editingStockId);
@@ -753,7 +930,10 @@ if (el.stockForm) {
     }
     saveState();
     el.stockForm.reset();
-    document.querySelector("#itemUnit").value = "pcs";
+    
+    if (el.hiddenStockSupplierId) el.hiddenStockSupplierId.value = "";
+    document.querySelector("#itemUnit").value = "";
+    
     render();
   });
 }
@@ -838,8 +1018,9 @@ if (el.stockTable) {
       if (item) {
         editingStockId = item.id;
         document.querySelector("#itemName").value = item.name;
-        if (el.itemSupplier) el.itemSupplier.value = item.supplierId;
-        document.querySelector("#itemUnit").value = item.unit || "pcs";
+        if (el.stockSupplierSearchInput) el.stockSupplierSearchInput.value = supplierName(item.supplierId);
+        if (el.hiddenStockSupplierId) el.hiddenStockSupplierId.value = item.supplierId;
+        document.querySelector("#itemUnit").value = item.unit || "";
         if (el.stockSubmitBtn) el.stockSubmitBtn.textContent = "Update Stock Item";
         if (el.stockForm) el.stockForm.scrollIntoView({ behavior: 'smooth' });
       }
@@ -853,7 +1034,7 @@ if (el.stockTable) {
       if (el.orderItemSearchInput) el.orderItemSearchInput.value = item.name;
       if (el.hiddenOrderItemId) el.hiddenOrderItemId.value = id;
       
-      if (el.orderQtyInlineUnit) el.orderQtyInlineUnit.textContent = formatUnit(item.unit);
+      if (el.orderQtyInlineUnit) el.orderQtyInlineUnit.textContent = item.unit || "pcs";
 
       if (el.recentOrderAlert) {
         el.recentOrderAlert.innerHTML = `
@@ -899,28 +1080,399 @@ if (el.deepEmailBtn) {
   });
 }
 
-if (el.stockSearch) el.stockSearch.addEventListener("input", renderStockTable);
+if (el.stockSearch) {
+  el.stockSearch.addEventListener("input", () => {
+    renderStockTable();
+    handleStockSearchInput();
+    if (!el.stockSearch.value.trim()) clearQuickOrderBar();
+  });
+  el.stockSearch.addEventListener("focus", handleStockSearchInput);
+}
 if (el.supplierFilter) el.supplierFilter.addEventListener("change", renderStockTable);
+
+if (el.stockSearchSuggestionsBox) {
+  el.stockSearchSuggestionsBox.addEventListener("click", (event) => {
+    const suggestionItem = event.target.closest(".suggestion-item");
+    if (!suggestionItem || !suggestionItem.dataset.id) return;
+
+    const item = state.stocks.find((s) => s.id === suggestionItem.dataset.id);
+    if (!item) return;
+
+    selectQuickOrderItem(item);
+    el.stockSearchSuggestionsBox.style.display = "none";
+  });
+}
+
+if (el.stockQuickOrderAddBtn) {
+  el.stockQuickOrderAddBtn.addEventListener("click", () => {
+    if (!selectedQuickOrderItem) return;
+    const qty = Math.max(1, Number(el.stockQuickOrderQty?.value) || 1);
+    const addedItem = selectedQuickOrderItem;
+
+    addOrUpdateOrderLine(addedItem, qty);
+    saveState();
+
+    if (el.stockQuickOrderAlert) {
+      el.stockQuickOrderAlert.innerHTML = `
+        <div style="background: var(--ok-bg); color: var(--ok-text); padding: 12px; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(36,113,58,0.15)">
+          ✔ Added: ${escapeHtml(addedItem.name)} (Qty: ${qty})
+        </div>
+      `;
+      el.stockQuickOrderAlert.style.display = "block";
+      setTimeout(() => {
+        if (el.stockQuickOrderAlert) el.stockQuickOrderAlert.style.display = "none";
+      }, 3000);
+    }
+
+    clearQuickOrderBar();
+    if (el.stockSearch) el.stockSearch.value = "";
+    renderStockTable();
+  });
+}
+
+if (el.stockQuickOrderCancelBtn) {
+  el.stockQuickOrderCancelBtn.addEventListener("click", () => {
+    clearQuickOrderBar();
+    if (el.stockSearch) el.stockSearch.value = "";
+    renderStockTable();
+  });
+}
+
+if (el.stockQuickOrderQty) {
+  el.stockQuickOrderQty.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (el.stockQuickOrderAddBtn) el.stockQuickOrderAddBtn.click();
+    }
+  });
+}
+
+if (el.supplierSearchInput) {
+  el.supplierSearchInput.addEventListener("input", () => {
+    renderSupplierList();
+    handleSupplierListSearch();
+  });
+  el.supplierSearchInput.addEventListener("focus", handleSupplierListSearch);
+}
+
+if (el.supplierSearchSuggestionsBox) {
+  el.supplierSearchSuggestionsBox.addEventListener("click", (event) => {
+    const suggestionItem = event.target.closest(".suggestion-item");
+    if (!suggestionItem || !suggestionItem.dataset.id) return;
+
+    if (el.supplierSearchInput) el.supplierSearchInput.value = suggestionItem.dataset.name;
+    el.supplierSearchSuggestionsBox.style.display = "none";
+    renderSupplierList();
+  });
+}
 
 el.tabButtons.forEach((button) => {
   button.addEventListener("click", () => showPage(button.dataset.pageTarget));
 });
 
-if (document.querySelector("#exportDataBtn")) {
-  document.querySelector("#exportDataBtn").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "shop-stock-data.json";
-    link.click();
+// ---------- Import / Export ----------
+
+const CSV_HEADERS = ["Item Name", "Supplier", "Unit", "Supplier Email", "Supplier Phone"];
+
+function downloadBlob(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function buildStockExportRows() {
+  return state.stocks.map((item) => {
+    const supplier = state.suppliers.find((s) => s.id === item.supplierId);
+    return {
+      name: item.name,
+      supplier: supplier?.name || "",
+      unit: item.unit || "",
+      email: supplier?.email || "",
+      phone: supplier?.phone || ""
+    };
+  });
+}
+
+function toCsvValue(value) {
+  const str = String(value ?? "");
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function buildCsvText() {
+  const rows = buildStockExportRows();
+  const lines = [CSV_HEADERS.map(toCsvValue).join(",")];
+  rows.forEach((row) => {
+    lines.push([row.name, row.supplier, row.unit, row.email, row.phone].map(toCsvValue).join(","));
+  });
+  return lines.join("\r\n");
+}
+
+function buildExcelHtml() {
+  const rows = buildStockExportRows();
+  const headerCells = CSV_HEADERS.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
+  const bodyRows = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(row.name)}</td>
+          <td>${escapeHtml(row.supplier)}</td>
+          <td>${escapeHtml(row.unit)}</td>
+          <td>${escapeHtml(row.email)}</td>
+          <td>${escapeHtml(row.phone)}</td>
+        </tr>`
+    )
+    .join("");
+
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Stock</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body>
+<table border="1">
+<thead><tr>${headerCells}</tr></thead>
+<tbody>${bodyRows}</tbody>
+</table>
+</body>
+</html>`;
+}
+
+if (el.exportCsvBtn) {
+  el.exportCsvBtn.addEventListener("click", () => {
+    if (!state.stocks.length) {
+      alert("There are no stock items to export yet.");
+      return;
+    }
+    downloadBlob(buildCsvText(), "shop-stock-list.csv", "text/csv;charset=utf-8;");
+  });
+}
+
+if (el.exportExcelBtn) {
+  el.exportExcelBtn.addEventListener("click", () => {
+    if (!state.stocks.length) {
+      alert("There are no stock items to export yet.");
+      return;
+    }
+    downloadBlob(buildExcelHtml(), "shop-stock-list.xls", "application/vnd.ms-excel");
+  });
+}
+
+if (el.exportDataBtn) {
+  el.exportDataBtn.addEventListener("click", () => {
+    downloadBlob(JSON.stringify(state, null, 2), "shop-stock-data.json", "application/json");
+  });
+}
+
+function findOrCreateSupplierByName(name, email, phone) {
+  const trimmedName = String(name || "").trim();
+  if (!trimmedName) return "";
+
+  let supplier = state.suppliers.find(
+    (s) => s.name.trim().toLowerCase() === trimmedName.toLowerCase()
+  );
+
+  if (!supplier) {
+    supplier = { id: generateUUID(), name: trimmedName, email: email || "", phone: phone || "" };
+    state.suppliers.push(supplier);
+  }
+
+  return supplier.id;
+}
+
+function applyImportedStockRows(rows) {
+  const newStocks = rows
+    .filter((row) => row.name && row.name.trim())
+    .map((row) => ({
+      id: generateUUID(),
+      name: row.name.trim(),
+      supplierId: findOrCreateSupplierByName(row.supplier, row.email, row.phone),
+      unit: formatUnit(row.unit)
+    }));
+
+  state.stocks = newStocks;
+  state.order = [];
+  saveState();
+  render();
+}
+
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n" || char === "\r") {
+      if (char === "\r" && text[i + 1] === "\n") i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+}
+
+function mapHeaderIndexes(headerRow) {
+  const indexes = {};
+  headerRow.forEach((header, idx) => {
+    const key = String(header).trim().toLowerCase();
+    if (key === "item name") indexes.name = idx;
+    else if (key === "supplier") indexes.supplier = idx;
+    else if (key === "unit") indexes.unit = idx;
+    else if (key === "supplier email") indexes.email = idx;
+    else if (key === "supplier phone") indexes.phone = idx;
+  });
+  return indexes;
+}
+
+function rowsFromTable(tableRows, headerIndexes) {
+  return tableRows.map((cells) => ({
+    name: cells[headerIndexes.name] ?? "",
+    supplier: headerIndexes.supplier !== undefined ? cells[headerIndexes.supplier] ?? "" : "",
+    unit: headerIndexes.unit !== undefined ? cells[headerIndexes.unit] ?? "" : "",
+    email: headerIndexes.email !== undefined ? cells[headerIndexes.email] ?? "" : "",
+    phone: headerIndexes.phone !== undefined ? cells[headerIndexes.phone] ?? "" : ""
+  }));
+}
+
+function importFromCsvText(text) {
+  const allRows = parseCsvText(text);
+  if (!allRows.length) {
+    alert("That CSV file appears to be empty.");
+    return false;
+  }
+  const headerIndexes = mapHeaderIndexes(allRows[0]);
+  if (headerIndexes.name === undefined) {
+    alert("Could not find an 'Item Name' column in this CSV file.");
+    return false;
+  }
+  const rows = rowsFromTable(allRows.slice(1), headerIndexes);
+  applyImportedStockRows(rows);
+  return true;
+}
+
+function importFromExcelHtml(text) {
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  const table = doc.querySelector("table");
+  if (!table) {
+    alert("Could not read a stock table from this file. Only .xls files exported from this app are supported for import.");
+    return false;
+  }
+
+  const tableRows = [...table.querySelectorAll("tr")].map((tr) =>
+    [...tr.querySelectorAll("th,td")].map((cell) => cell.textContent.trim())
+  );
+
+  if (!tableRows.length) {
+    alert("That Excel file appears to be empty.");
+    return false;
+  }
+
+  const headerIndexes = mapHeaderIndexes(tableRows[0]);
+  if (headerIndexes.name === undefined) {
+    alert("Could not find an 'Item Name' column in this Excel file.");
+    return false;
+  }
+
+  const rows = rowsFromTable(tableRows.slice(1), headerIndexes);
+  applyImportedStockRows(rows);
+  return true;
+}
+
+function importFromJsonText(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    alert("That file is not valid JSON.");
+    return false;
+  }
+
+  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.suppliers) && !Array.isArray(parsed.stocks)) {
+    alert("That JSON file doesn't look like a shop data backup.");
+    return false;
+  }
+
+  state = {
+    suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
+    stocks: (Array.isArray(parsed.stocks) ? parsed.stocks : []).map(normalizeStockItem),
+    order: Array.isArray(parsed.order) ? parsed.order : []
+  };
+  saveState();
+  render();
+  return true;
+}
+
+if (el.importDataInput) {
+  el.importDataInput.addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const fileName = file.name.toLowerCase();
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const text = reader.result;
+      let success = false;
+
+      if (fileName.endsWith(".json")) {
+        if (confirm("Importing this backup will replace ALL current data (suppliers, stock items, and orders). Continue?")) {
+          success = importFromJsonText(text);
+        }
+      } else if (fileName.endsWith(".xls")) {
+        if (confirm("Importing this Excel file will replace your current stock list and clear the current order list. Continue?")) {
+          success = importFromExcelHtml(text);
+        }
+      } else {
+        if (confirm("Importing this CSV file will replace your current stock list and clear the current order list. Continue?")) {
+          success = importFromCsvText(text);
+        }
+      }
+
+      if (success) alert("Import complete.");
+      el.importDataInput.value = "";
+    };
+
+    reader.onerror = () => {
+      alert("Could not read that file. Please try again.");
+      el.importDataInput.value = "";
+    };
+
+    reader.readAsText(file);
   });
 }
 
 function initializeApp() {
   renderSupplierOptions();
-  if (state.suppliers.length > 0 && el.itemSupplier && !el.itemSupplier.value) {
-    el.itemSupplier.value = state.suppliers[0].id;
-  }
   renderStockTable();
   renderSupplierList();
   renderBifurcatedOrders();
