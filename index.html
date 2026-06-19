@@ -12,7 +12,7 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css?v=8" />
     <style>
-      /* Sub-navigation tabs redesign matching Active/Completed buttons exactly */
+      /* Sub-navigation tabs layout inside Add Data */
       .sub-nav-tabs {
         display: flex;
         gap: 8px;
@@ -153,7 +153,7 @@
       .single-line-row {
         background: #ffffff;
         border: 1px solid var(--line);
-        border-radius: 6px;
+        border-radius: 8px;
         padding: 12px 14px;
         margin-bottom: 6px;
         display: flex;
@@ -168,9 +168,17 @@
       .single-line-row:active {
         background: var(--soft);
       }
+      
+      /* Prevents text from pushing past container edges */
       .single-line-row .vendor-title {
         font-weight: 700;
         color: var(--ink);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+        min-width: 0;
+        padding-right: 8px;
       }
       .single-line-row .badge-count {
         background: #eef6f4;
@@ -179,6 +187,7 @@
         padding: 2px 8px;
         border-radius: 12px;
         font-weight: 700;
+        flex-shrink: 0;
       }
 
       /* HEADER AND ACTION STYLING OVERRIDES */
@@ -252,7 +261,7 @@
         height: 16px !important;
         accent-color: #ff3b30;
         cursor: pointer;
-        margin: 0 !important;
+        margin: 0 8px 0 0 !important;
         flex-shrink: 0;
       }
       
@@ -380,7 +389,7 @@
 
             <div style="background: #fafbfc; border: 1px solid var(--line); border-radius: 8px; padding: 16px;">
               <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid var(--line); padding-bottom: 8px; margin-bottom: 14px; flex-wrap: wrap; gap: 4px;">
-                <h3 id="deepViewVendorTitle" style="margin: 0; color: var(--primary); font-size: 1.15rem">📦 Vendor</h3>
+                <h3 id="deepViewVendorTitle" style="margin: 0; color: var(--primary); font-size: 1.15rem">Vendor</h3>
                 <span id="deepViewDateLabel" style="font-size: 0.8rem; color: var(--muted); font-weight: bold;">Date: -</span>
               </div>
 
@@ -430,8 +439,7 @@
                 <input id="itemUnit" placeholder="pcs, packs, bags, kg" value="pcs" required />
               </label>
               <button id="stockSubmitBtn" class="primary full-row" type="submit">Save Stock Item</button>
-            </form>
-
+            </label>
             <div class="toolbar">
               <input id="stockSearch" placeholder="Search stock items" />
               <select id="supplierFilter" aria-label="Filter by supplier"></select>
