@@ -52,7 +52,6 @@ const el = {
   recentOrderAlert: document.querySelector("#recentOrderAlert"),
   stockSubmitBtn: document.querySelector("#stockSubmitBtn"),
   
-  // Inline entry tag added for input tracker
   orderQtyInlineUnit: document.querySelector("#orderQtyInlineUnit"),
   
   pillActive: document.querySelector("#pillActive"),
@@ -117,6 +116,7 @@ function formatNumber(value) {
   return Number(value || 0).toLocaleString("en-IN");
 }
 
+// Clear units tracking strings cleanly inside active form buffers
 function formatUnit(value) {
   return String(value || "pcs").trim() || "pcs";
 }
@@ -311,13 +311,10 @@ function renderBifurcatedOrders() {
         <div class="single-line-row" data-supplier-id="${sId}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
           <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
             ${currentStatusFilter === 'completed' ? `<input type="checkbox" class="master-multi-delete-checkbox" data-supplier-id="${sId}">` : ''}
-            <span class="vendor-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📦 ${escapeHtml(vendorLabel)}</span>
+            <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
             <span class="badge-count">${sLinesCount} Item${sLinesCount === 1 ? '' : 's'}</span>
-            <button type="button" data-action="delete-entire-order" data-supplier-id="${sId}" title="Delete entire order list" style="min-width: 32px; min-height: 32px; height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; margin: 0; background: #fff5f5; border: 1px solid rgba(255, 59, 48, 0.2); border-radius: 6px; cursor: pointer;">
-              <span class="custom-red-trash-icon"></span>
-            </button>
           </div>
         </div>
       `;
@@ -344,14 +341,14 @@ function setupMasterLongPressTriggers() {
 
 function startMasterLongPress(e, row) {
   if (currentStatusFilter !== 'completed') return;
-  if (e.target.closest('.master-multi-delete-checkbox') || e.target.closest('button[data-action]')) return;
+  if (e.target.closest('.master-multi-delete-checkbox')) return;
 
   isLongPressTriggered = false;
   longPressTimer = setTimeout(() => {
     isLongPressTriggered = true;
     if (el.masterView) el.masterView.classList.add("selection-active");
     const check = row.querySelector(".master-multi-delete-checkbox");
-    if (check) check.checked = true;
+    if (check) check.checked = !check.checked;
     updateMasterBulkDeleteToolbarState();
     
     if (navigator.vibrate) navigator.vibrate(50); 
@@ -427,7 +424,7 @@ function openSupplierDeepView(supplierId) {
     return;
   }
 
-  if (el.deepViewVendorTitle) el.deepViewVendorTitle.textContent = `📦 ${supplier ? supplier.name : "Supplier"}`;
+  if (el.deepViewVendorTitle) el.deepViewVendorTitle.textContent = supplier ? supplier.name : "Supplier";
   
   const dateStr = filteredLines[0].dateCreated || getFormattedDate();
   if (el.deepViewDateLabel) el.deepViewDateLabel.textContent = `Date: ${dateStr}`;
@@ -543,26 +540,27 @@ function escapeHtml(value) {
   return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
 }
 
+// FIXED: Clean global status filters listener loop that doesn't trigger on list long presses
+document.querySelectorAll("[data-status-filter]").forEach((pill) => {
+  pill.addEventListener("click", () => {
+    if(el.pillActive) el.pillActive.classList.toggle("active", pill.id === "pillActive");
+    if(el.pillCompleted) el.pillCompleted.classList.toggle("active", pill.id === "pillCompleted");
+    currentStatusFilter = pill.dataset.statusFilter;
+    if (el.deepView) el.deepView.style.display = "none";
+    if (el.masterView) el.masterView.style.display = "block";
+    renderBifurcatedOrders();
+  });
+});
+
 if (el.bifurcatedOrderContainer) {
   el.bifurcatedOrderContainer.addEventListener("click", (event) => {
+    // FIXED: Blocks selection active flag mutations when switching filter tabs layout view modes
     if (isLongPressTriggered) {
       isLongPressTriggered = false;
       return;
     }
 
     if (event.target.classList.contains("master-multi-delete-checkbox")) {
-      return;
-    }
-
-    const trashBtn = event.target.closest('button[data-action="delete-entire-order"]');
-    if (trashBtn) {
-      event.stopPropagation();
-      const sId = trashBtn.dataset.supplierId;
-      if (confirm(`Are you sure you want to permanently delete the entire order list for ${supplierName(sId)}?`)) {
-        state.order = state.order.filter(line => !(line.supplierId === sId && (line.status || "active") === currentStatusFilter));
-        saveState();
-        renderBifurcatedOrders();
-      }
       return;
     }
 
@@ -900,6 +898,9 @@ if (el.deepEmailBtn) {
     toggleActiveCompletedState(focusedSupplierId, "completed");
   });
 }
+
+if (el.stockSearch) el.stockSearch.addEventListener("input", renderStockTable);
+if (el.supplierFilter) el.supplierFilter.addEventListener("change", renderStockTable);
 
 el.tabButtons.forEach((button) => {
   button.addEventListener("click", () => showPage(button.dataset.pageTarget));
