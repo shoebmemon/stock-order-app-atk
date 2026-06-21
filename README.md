@@ -29,7 +29,7 @@ CSV and Excel stock imports should use these columns:
 
 `Item Name`, `Category`, `Supplier`, `Unit`, `Supplier Email`, `Supplier Phone`
 
-Importing a CSV or Excel file replaces the stock list and clears the current order list. It keeps or creates suppliers based on the supplier name.
+Importing a CSV or Excel file adds any new items to your stock list and updates existing items that match by name (your current stock list, suppliers, and orders are not removed). It keeps or creates suppliers based on the supplier name.
 
 ## Android use
 

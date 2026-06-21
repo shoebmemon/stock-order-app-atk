@@ -64,7 +64,8 @@ function orderToDb(line) {
     item_id: line.itemId || null,
     supplier_id: line.supplierId || null,
     quantity: Number(line.quantity) || 1,
-    status: line.status || "active"
+    status: line.status || "active",
+    batch_id: line.batchId || null
   };
 }
 function orderFromDb(row) {
@@ -74,7 +75,8 @@ function orderFromDb(row) {
     supplierId: row.supplier_id,
     quantity: Number(row.quantity) || 1,
     status: row.status || "active",
-    dateCreated: row.created_at || getFormattedDate()
+    dateCreated: row.created_at || getFormattedDate(),
+    batchId: row.batch_id || null
   };
 }
 
@@ -261,6 +263,7 @@ if (typeof window !== "undefined") {
 
 let currentStatusFilter = "active"; 
 let focusedSupplierId = null;
+let focusedBatchId = null;
 
 let longPressTimer = null;
 let isLongPressTriggered = false;
@@ -418,14 +421,37 @@ function addOrUpdateOrderLine(item, qty) {
   }
 }
 
-function toggleActiveCompletedState(supplierId, newStatus) {
+function toggleActiveCompletedState(supplierId, newStatus, batchId) {
   const changedLines = [];
-  state.order.forEach((line) => {
-    if (line.supplierId === supplierId && (line.status || "active") !== newStatus) {
-      line.status = newStatus;
-      changedLines.push(line);
-    }
-  });
+
+  if (newStatus === "completed") {
+    // Sending an order: every currently-active line for this supplier becomes
+    // one new, distinct batch — so sending again later creates a separate
+    // entry instead of merging into the same completed group.
+    const newBatchId = generateUUID();
+    state.order.forEach((line) => {
+      if (line.supplierId === supplierId && (line.status || "active") !== "completed") {
+        line.status = "completed";
+        line.batchId = newBatchId;
+        changedLines.push(line);
+      }
+    });
+  } else {
+    // Reverting to active: only un-complete the specific batch being viewed,
+    // not every completed order this supplier has ever had.
+    state.order.forEach((line) => {
+      if (
+        line.supplierId === supplierId &&
+        (line.status || "active") === "completed" &&
+        (line.batchId || "") === (batchId || "")
+      ) {
+        line.status = "active";
+        line.batchId = null;
+        changedLines.push(line);
+      }
+    });
+  }
+
   saveState();
   if (changedLines.length) {
     syncToSupabase("orders", "upsert", { rows: changedLines.map(orderToDb) });
@@ -760,6 +786,53 @@ function renderBifurcatedOrders() {
     return;
   }
 
+  if (currentStatusFilter === "completed") {
+    // Group by supplier + batch, so each separate "send" shows as its own
+    // entry instead of merging into one ongoing bucket per supplier.
+    const groups = new Map();
+    targetLines.forEach((line) => {
+      const batchKey = line.batchId || "";
+      const groupKey = `${line.supplierId}::${batchKey}`;
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, { supplierId: line.supplierId, batchId: batchKey, lines: [] });
+      }
+      groups.get(groupKey).lines.push(line);
+    });
+
+    const sortedGroups = [...groups.values()].sort((a, b) => {
+      const dateA = new Date(a.lines[0].dateCreated || 0).getTime();
+      const dateB = new Date(b.lines[0].dateCreated || 0).getTime();
+      return dateB - dateA; // most recent first
+    });
+
+    el.bifurcatedOrderContainer.innerHTML = sortedGroups
+      .map(({ supplierId: sId, batchId, lines }) => {
+        const vendorLabel = supplierName(sId);
+        const dateLabel = formatDisplayDate(lines[0].dateCreated);
+
+        return `
+          <div class="single-line-row" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
+            <div class="vendor-title-wrapper">
+              <input type="checkbox" class="master-multi-delete-checkbox" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}">
+              <div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;">
+                <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
+                <span class="subtle" style="font-size: 0.78rem;">${escapeHtml(dateLabel)}</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;">
+              <span class="badge-count">${lines.length} Item${lines.length === 1 ? '' : 's'}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+    bindMasterCheckboxListeners();
+    setupMasterLongPressTriggers(); 
+    return;
+  }
+
+  // Active tab: still grouped purely by supplier — items added at different
+  // times stay together as one draft until they're actually sent.
   const uniqueSuppliers = [...new Set(targetLines.map(line => line.supplierId))];
 
   el.bifurcatedOrderContainer.innerHTML = uniqueSuppliers
@@ -770,7 +843,6 @@ function renderBifurcatedOrders() {
       return `
         <div class="single-line-row" data-supplier-id="${sId}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
           <div class="vendor-title-wrapper">
-            ${currentStatusFilter === 'completed' ? `<input type="checkbox" class="master-multi-delete-checkbox" data-supplier-id="${sId}">` : ''}
             <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;">
@@ -779,11 +851,6 @@ function renderBifurcatedOrders() {
         </div>
       `;
     }).join("");
-
-  if (currentStatusFilter === 'completed') {
-    bindMasterCheckboxListeners();
-    setupMasterLongPressTriggers(); 
-  }
 }
 
 function setupMasterLongPressTriggers() {
@@ -841,7 +908,7 @@ if (el.bifurcatedOrderContainer) {
 
     const targetRow = event.target.closest(".single-line-row");
     if (!targetRow) return;
-    openSupplierDeepView(targetRow.dataset.supplierId);
+    openSupplierDeepView(targetRow.dataset.supplierId, targetRow.dataset.batchId);
   });
 }
 
@@ -919,7 +986,7 @@ function saveEditQtyModal() {
   saveState();
   syncToSupabase("orders", "upsert", { rows: [orderToDb(line)] });
   closeEditQtyModal();
-  openSupplierDeepView(focusedSupplierId);
+  openSupplierDeepView(focusedSupplierId, focusedBatchId);
 }
 
 if (el.editQtySaveBtn) {
@@ -959,7 +1026,7 @@ function updateMasterBulkDeleteToolbarState() {
   const count = selectedBoxes.length;
 
   if (count > 0 && currentStatusFilter === "completed") {
-    el.masterBulkDeleteCountLabel.textContent = `${count} supplier${count === 1 ? "" : "s"} selected`;
+    el.masterBulkDeleteCountLabel.textContent = `${count} order${count === 1 ? "" : "s"} selected`;
     el.masterBulkDeleteToolbar.style.display = "flex";
   } else {
     el.masterBulkDeleteToolbar.style.display = "none";
@@ -967,10 +1034,16 @@ function updateMasterBulkDeleteToolbarState() {
   }
 }
 
-function openSupplierDeepView(supplierId) {
+function openSupplierDeepView(supplierId, batchId) {
   focusedSupplierId = supplierId;
+  focusedBatchId = currentStatusFilter === "completed" ? (batchId || "") : null;
   const supplier = state.suppliers.find(s => s.id === supplierId);
-  const filteredLines = state.order.filter(line => line.supplierId === supplierId && (line.status || "active") === currentStatusFilter);
+  const filteredLines = state.order.filter(line => {
+    if (line.supplierId !== supplierId) return false;
+    if ((line.status || "active") !== currentStatusFilter) return false;
+    if (currentStatusFilter === "completed") return (line.batchId || "") === focusedBatchId;
+    return true;
+  });
 
   if (!filteredLines.length) {
     if (el.deepView) el.deepView.style.display = "none";
@@ -1121,7 +1194,7 @@ if (el.toggleStatusStateBtn) {
       }
     } else {
       if (confirm("Move this entire purchase list back to active order lists?")) {
-        toggleActiveCompletedState(focusedSupplierId, "active");
+        toggleActiveCompletedState(focusedSupplierId, "active", focusedBatchId);
       }
     }
   });
@@ -1137,7 +1210,7 @@ if (el.bulkDeleteExecuteBtn) {
       state.order = state.order.filter(line => !idsToDelete.includes(line.id));
       saveState();
       syncToSupabase("orders", "delete", { ids: idsToDelete });
-      openSupplierDeepView(focusedSupplierId);
+      openSupplierDeepView(focusedSupplierId, focusedBatchId);
     }
   });
 }
@@ -1147,14 +1220,18 @@ if (el.masterBulkDeleteExecuteBtn) {
     const selectedBoxes = el.bifurcatedOrderContainer.querySelectorAll(".master-multi-delete-checkbox:checked");
     if (!selectedBoxes.length) return;
 
-    if (confirm(`Are you sure you want to permanently delete the entire completed order history for these ${selectedBoxes.length} selected suppliers?`)) {
-      const supplierIdsToDelete = Array.from(selectedBoxes).map(box => box.dataset.supplierId);
-      state.order = state.order.filter(line => !(supplierIdsToDelete.includes(line.supplierId) && line.status === "completed"));
+    if (confirm(`Are you sure you want to permanently delete these ${selectedBoxes.length} selected completed order(s)?`)) {
+      const pairsToDelete = new Set(
+        Array.from(selectedBoxes).map(box => `${box.dataset.supplierId}::${box.dataset.batchId || ""}`)
+      );
+
+      const idsToDelete = state.order
+        .filter(line => line.status === "completed" && pairsToDelete.has(`${line.supplierId}::${line.batchId || ""}`))
+        .map(line => line.id);
+
+      state.order = state.order.filter(line => !idsToDelete.includes(line.id));
       saveState();
-      syncToSupabase("orders", "deleteWhere", {
-        match: { status: "completed" },
-        inFilter: { column: "supplier_id", values: supplierIdsToDelete }
-      });
+      syncToSupabase("orders", "delete", { ids: idsToDelete });
       renderBifurcatedOrders();
     }
   });
