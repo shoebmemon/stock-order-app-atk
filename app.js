@@ -623,7 +623,7 @@ function renderStockTable() {
   const visibleStocks = state.stocks.filter((item) => {
     const matchesQuery = [item.name, supplierName(item.supplierId)].join(" ").toLowerCase().includes(query);
     return matchesQuery && (supplierFilter === "all" || item.supplierId === supplierFilter);
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   if (!visibleStocks.length) {
     el.stockTable.innerHTML = `<tr><td colspan="4" class="empty">No stock items found.</td></tr>`;
@@ -742,7 +742,9 @@ function openSupplierStockDetail(supplierId) {
 
 function renderSupplierStockDetail() {
   if (!el.supplierStockDetailList || !focusedSupplierDetailId) return;
-  const items = state.stocks.filter(s => s.supplierId === focusedSupplierDetailId);
+  const items = state.stocks
+    .filter(s => s.supplierId === focusedSupplierDetailId)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   if (!items.length) {
     el.supplierStockDetailList.innerHTML = `<div class="empty">No stock items linked to this supplier yet.<br>Go to Stock Details to add some.</div>`;
@@ -778,9 +780,10 @@ function renderSupplierList() {
   }
 
   const query = (el.supplierSearchInput?.value || "").trim().toLowerCase();
-  const visibleSuppliers = query
+  const visibleSuppliers = (query
     ? state.suppliers.filter((supplier) => supplier.name.toLowerCase().includes(query))
-    : state.suppliers;
+    : [...state.suppliers]
+  ).sort((a, b) => a.name.localeCompare(b.name));
 
   if (!visibleSuppliers.length) {
     el.supplierList.innerHTML = `<div class="empty">No suppliers match your search.</div>`;
@@ -803,7 +806,7 @@ function renderSupplierList() {
           </div>
           <div style="flex-shrink: 0; display: flex; align-items: center; gap: 6px;">
               <button class="icon-btn" type="button" data-action="edit-supplier" data-id="${supplier.id}" style="padding: 0; min-height: 34px; width: 34px; font-size: 1rem;" title="Edit">✏️</button>
-              <button type="button" data-action="delete-supplier" data-id="${supplier.id}" style="padding: 0; min-height: 34px; width: 34px; font-size: 1rem; background: #ff3b30; border: none; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;" title="Delete">🗑</button>
+              <button class="icon-btn danger-soft" type="button" data-action="delete-supplier" data-id="${supplier.id}" style="padding: 0; min-height: 34px; width: 34px; font-size: 1rem;" title="Delete">🗑</button>
               <span style="color: var(--primary); font-size: 1.2rem; line-height: 1; padding-left: 4px;">›</span>
             </div>
         </div>
@@ -867,17 +870,20 @@ if (el.supplierStockDetailList) {
 function handleStockSupplierSearch() {
   if (!el.stockSupplierSearchInput || !el.supplierSuggestionsBox) return;
   const query = el.stockSupplierSearchInput.value.trim().toLowerCase();
-  if (!query) {
-    el.supplierSuggestionsBox.style.display = "none";
+
+  const matches = (query
+    ? state.suppliers.filter((supplier) => supplier.name.toLowerCase().includes(query))
+    : [...state.suppliers]
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!state.suppliers.length) {
+    el.supplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers added yet. Go to Supplier Details to add one.</div>`;
+    el.supplierSuggestionsBox.style.display = "block";
     return;
   }
 
-  const matches = state.suppliers.filter((supplier) => 
-    supplier.name.toLowerCase().includes(query)
-  );
-
   if (!matches.length) {
-    el.supplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers match your search.</div>`;
+    el.supplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers match "${escapeHtml(query)}"</div>`;
     el.supplierSuggestionsBox.style.display = "block";
     return;
   }
@@ -1254,16 +1260,27 @@ if (el.editStockModal) {
 
 // Supplier autocomplete inside the edit stock modal
 if (el.editStockSupplierSearch) {
-  el.editStockSupplierSearch.addEventListener("input", () => {
+  const showEditStockSuppliers = () => {
     const query = el.editStockSupplierSearch.value.trim().toLowerCase();
-    if (!query) { el.editStockSupplierSuggestionsBox.style.display = "none"; return; }
-    const matches = state.suppliers.filter(s => s.name.toLowerCase().includes(query));
-    if (!matches.length) { el.editStockSupplierSuggestionsBox.style.display = "none"; return; }
-    el.editStockSupplierSuggestionsBox.innerHTML = matches.map(s =>
-      `<div class="suggestion-item supplier-suggestion-item" data-id="${s.id}" data-name="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong></div>`
-    ).join("");
+    const matches = (query
+      ? state.suppliers.filter(s => s.name.toLowerCase().includes(query))
+      : [...state.suppliers]
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    if (!matches.length) {
+      el.editStockSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No matches</div>`;
+    } else {
+      el.editStockSupplierSuggestionsBox.innerHTML = matches.map(s =>
+        `<div class="suggestion-item supplier-suggestion-item" data-id="${s.id}" data-name="${escapeHtml(s.name)}">
+          <strong>${escapeHtml(s.name)}</strong>
+        </div>`
+      ).join("");
+    }
     el.editStockSupplierSuggestionsBox.style.display = "block";
-  });
+  };
+
+  el.editStockSupplierSearch.addEventListener("input", showEditStockSuppliers);
+  el.editStockSupplierSearch.addEventListener("focus", showEditStockSuppliers);
 }
 
 if (el.editStockSupplierSuggestionsBox) {

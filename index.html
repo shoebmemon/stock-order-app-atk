@@ -10,7 +10,7 @@
     <title>Shop Stock Order App</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=19" />
+    <link rel="stylesheet" href="styles.css?v=20" />
     <style>
       /* Sub-navigation tabs layout inside Add Data */
       .sub-nav-tabs {
@@ -328,6 +328,8 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: nowrap;
+        gap: 8px;
         animation: fadeIn 0.2s ease-in-out;
       }
       @keyframes fadeIn {
@@ -442,11 +444,11 @@
 
           <div id="orderDetailsMasterView">
             <div id="masterBulkDeleteToolbar" class="bulk-delete-bar" style="display: none; margin-bottom: 12px;">
-              <span id="masterBulkDeleteCountLabel" style="color: #c53030; font-size: 0.88rem; font-weight: 700;">0 orders selected</span>
-              <div style="display: flex; gap: 8px;">
-                <button id="masterBulkDeleteCancelBtn" type="button" class="secondary small-action">Cancel</button>
-                <button id="masterBulkDeleteExecuteBtn" type="button" class="primary small-action" style="background: var(--danger);">Delete</button>
-                <button id="masterBulkDeleteAllBtn" type="button" class="primary small-action" style="background: var(--danger);">Delete All</button>
+              <span id="masterBulkDeleteCountLabel" style="color: #c53030; font-size: 0.88rem; font-weight: 700; flex-shrink: 0;">0 orders selected</span>
+              <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                <button id="masterBulkDeleteCancelBtn" type="button" class="secondary small-action" style="white-space: nowrap;">Cancel</button>
+                <button id="masterBulkDeleteExecuteBtn" type="button" class="primary small-action" style="background: var(--danger); white-space: nowrap;">Delete</button>
+                <button id="masterBulkDeleteAllBtn" type="button" class="primary small-action" style="background: var(--danger); white-space: nowrap;">Delete All</button>
               </div>
             </div>
 
@@ -721,6 +723,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=29"></script>
+    <script src="app.js?v=30"></script>
   </body>
 </html>
