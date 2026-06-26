@@ -316,7 +316,6 @@ const el = {
   masterBulkDeleteCountLabel: document.querySelector("#masterBulkDeleteCountLabel"),
   masterBulkDeleteCancelBtn: document.querySelector("#masterBulkDeleteCancelBtn"),
   masterBulkDeleteExecuteBtn: document.querySelector("#masterBulkDeleteExecuteBtn"),
-  masterBulkDeleteAllBtn: document.querySelector("#masterBulkDeleteAllBtn"),
 
   pages: document.querySelectorAll(".page"),
   tabButtons: document.querySelectorAll(".tab-button"),
@@ -817,17 +816,23 @@ function renderSupplierList() {
 function handleSearchInput() {
   if (!el.orderItemSearchInput || !el.searchSuggestionsBox) return;
   const query = el.orderItemSearchInput.value.trim().toLowerCase();
-  if (!query) {
-    el.searchSuggestionsBox.style.display = "none";
+
+  const matches = (query
+    ? state.stocks.filter((item) =>
+        item.name.toLowerCase().includes(query) ||
+        supplierName(item.supplierId).toLowerCase().includes(query)
+      )
+    : [...state.stocks]
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!state.stocks.length) {
+    el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No stock items added yet. Go to Stock Details to add some.</div>`;
+    el.searchSuggestionsBox.style.display = "block";
     return;
   }
 
-  const matches = state.stocks.filter((item) => 
-    item.name.toLowerCase().includes(query) || supplierName(item.supplierId).toLowerCase().includes(query)
-  );
-
   if (!matches.length) {
-    el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No items match your search.</div>`;
+    el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No items match "${escapeHtml(query)}"</div>`;
     el.searchSuggestionsBox.style.display = "block";
     return;
   }
@@ -836,7 +841,7 @@ function handleSearchInput() {
     .map((item) => `
       <div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}">
         <strong>${escapeHtml(item.name)}</strong>
-        <span class="vendor-tag">Supplier: ${escapeHtml(supplierName(item.supplierId))}</span>
+        <span class="vendor-tag">${escapeHtml(supplierName(item.supplierId))}</span>
       </div>
     `).join("");
   el.searchSuggestionsBox.style.display = "block";
@@ -1291,7 +1296,7 @@ if (el.editStockSupplierSuggestionsBox) {
     if (el.editStockSupplierSearch) el.editStockSupplierSearch.value = item.dataset.name;
     if (el.editStockHiddenSupplierId) el.editStockHiddenSupplierId.value = item.dataset.id;
     el.editStockSupplierSuggestionsBox.style.display = "none";
-    if (el.editStockUnit) el.editStockUnit.focus();
+    // Supplier is now the last field — just close the dropdown
   });
 }
 
@@ -1647,16 +1652,6 @@ if (el.masterBulkDeleteCancelBtn) {
   });
 }
 
-if (el.masterBulkDeleteAllBtn) {
-  el.masterBulkDeleteAllBtn.addEventListener("click", () => {
-    if (confirm("⚠️ CRITICAL ACTION: Are you sure you want to permanently wipe out ALL completed order histories from your dashboard storage? This cannot be undone.")) {
-      state.order = state.order.filter(line => (line.status || "active") !== "completed");
-      saveState();
-      syncToSupabase("orders", "deleteWhere", { match: { status: "completed" } });
-      renderBifurcatedOrders();
-    }
-  });
-}
 
 el.subTabButtons.forEach((btn) => {
   btn.addEventListener("click", () => showSubPage(btn.dataset.subTarget));
@@ -1721,9 +1716,7 @@ if (el.supplierSuggestionsBox) {
     if (el.hiddenStockSupplierId) el.hiddenStockSupplierId.value = suggestionItem.dataset.id;
 
     el.supplierSuggestionsBox.style.display = "none";
-    if (document.querySelector("#itemUnit")) {
-      document.querySelector("#itemUnit").focus();
-    }
+    // Supplier is now the last field — just close the dropdown, user can submit
   });
 }
 
@@ -1745,9 +1738,6 @@ document.addEventListener("click", (event) => {
 if (el.orderItemSearchInput) {
   el.orderItemSearchInput.addEventListener("input", () => {
     handleSearchInput();
-    if (!el.orderItemSearchInput.value.trim()) {
-      clearInlineUnitLabel();
-    }
   });
   el.orderItemSearchInput.addEventListener("focus", handleSearchInput);
 }

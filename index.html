@@ -448,7 +448,6 @@
               <div style="display: flex; gap: 8px; flex-shrink: 0;">
                 <button id="masterBulkDeleteCancelBtn" type="button" class="secondary small-action" style="white-space: nowrap;">Cancel</button>
                 <button id="masterBulkDeleteExecuteBtn" type="button" class="primary small-action" style="background: var(--danger); white-space: nowrap;">Delete</button>
-                <button id="masterBulkDeleteAllBtn" type="button" class="primary small-action" style="background: var(--danger); white-space: nowrap;">Delete All</button>
               </div>
             </div>
 
@@ -508,16 +507,16 @@
                 <input id="itemName" autocomplete="off" required placeholder="e.g. Basmati Rice 5kg" />
               </label>
               <label>
+                Unit
+                <input id="itemUnit" placeholder="pcs, packs, bags, kg" autocomplete="off" required />
+              </label>
+              <label class="full-row">
                 Supplier
                 <div class="search-suggest-container">
                   <input id="stockSupplierSearchInput" type="text" placeholder="🔍 Type supplier name to filter..." autocomplete="off" required />
                   <input id="hiddenStockSupplierId" type="hidden" required />
                   <div id="supplierSuggestionsBox" class="search-suggestions-box"></div>
                 </div>
-              </label>
-              <label>
-                Unit
-                <input id="itemUnit" placeholder="pcs, packs, bags, kg" autocomplete="off" required />
               </label>
               <button id="stockSubmitBtn" class="primary full-row" type="submit">Save Stock Item</button>
             </form>
@@ -651,16 +650,16 @@
             <input type="text" id="editStockName" autocomplete="off" required placeholder="e.g. Basmati Rice 5kg" />
           </label>
           <label>
+            Unit
+            <input type="text" id="editStockUnit" autocomplete="off" placeholder="pcs, packs, bags, kg" />
+          </label>
+          <label>
             Supplier
             <div class="search-suggest-container">
               <input id="editStockSupplierSearch" type="text" placeholder="🔍 Type supplier name to filter..." autocomplete="off" />
               <input id="editStockHiddenSupplierId" type="hidden" />
               <div id="editStockSupplierSuggestionsBox" class="search-suggestions-box"></div>
             </div>
-          </label>
-          <label>
-            Unit
-            <input type="text" id="editStockUnit" autocomplete="off" placeholder="pcs, packs, bags, kg" />
           </label>
         </div>
         <div style="display: flex; gap: 10px; margin-top: 18px;">
@@ -723,6 +722,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=30"></script>
+    <script src="app.js?v=35"></script>
   </body>
 </html>
