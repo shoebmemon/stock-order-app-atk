@@ -283,6 +283,7 @@ const el = {
   searchSuggestionsBox: document.querySelector("#searchSuggestionsBox"),
   orderQty: document.querySelector("#orderQty"),
   supplierFilter: document.querySelector("#supplierFilter"),
+  supplierFilterSuggestionsBox: document.querySelector("#supplierFilterSuggestionsBox"),
   stockSearch: document.querySelector("#stockSearch"),
   recentOrderAlert: document.querySelector("#recentOrderAlert"),
   stockSubmitBtn: document.querySelector("#stockSubmitBtn"),
@@ -357,6 +358,12 @@ const el = {
   alreadyInListBody: document.querySelector("#alreadyInListBody"),
   alreadyInListNoBtn: document.querySelector("#alreadyInListNoBtn"),
   alreadyInListEditBtn: document.querySelector("#alreadyInListEditBtn"),
+
+  confirmModal: document.querySelector("#confirmModal"),
+  confirmModalTitle: document.querySelector("#confirmModalTitle"),
+  confirmModalBody: document.querySelector("#confirmModalBody"),
+  confirmModalCancelBtn: document.querySelector("#confirmModalCancelBtn"),
+  confirmModalOkBtn: document.querySelector("#confirmModalOkBtn"),
 
   editStockModal: document.querySelector("#editStockModal"),
   editStockName: document.querySelector("#editStockName"),
@@ -604,24 +611,20 @@ function showSubPage(subPageId) {
 }
 
 function renderSupplierOptions() {
-  if (!el.supplierFilter) return;
-  const selectedFilterSupplier = el.supplierFilter.value;
-  
-  el.supplierFilter.innerHTML = `<option value="all">All suppliers</option>` + state.suppliers
-    .map((supplier) => `<option value="${supplier.id}">${escapeHtml(supplier.name)}</option>`)
-    .join("");
-
-  keepSelectValue(el.supplierFilter, selectedFilterSupplier || "all");
+  // Supplier filter is now a text search box — nothing to render here.
+  // The suggestions box is populated on demand by handleSupplierFilterSearch().
 }
 
 function renderStockTable() {
   if (!el.stockTable || !el.stockSearch || !el.supplierFilter) return;
   const query = el.stockSearch.value.trim().toLowerCase();
-  const supplierFilter = el.supplierFilter.value || "all";
+  const supplierQuery = el.supplierFilter.value.trim().toLowerCase();
 
   const visibleStocks = state.stocks.filter((item) => {
-    const matchesQuery = [item.name, supplierName(item.supplierId)].join(" ").toLowerCase().includes(query);
-    return matchesQuery && (supplierFilter === "all" || item.supplierId === supplierFilter);
+    const sName = supplierName(item.supplierId).toLowerCase();
+    const matchesQuery = [item.name, sName].join(" ").toLowerCase().includes(query);
+    const matchesSupplier = !supplierQuery || sName.includes(supplierQuery);
+    return matchesQuery && matchesSupplier;
   }).sort((a, b) => a.name.localeCompare(b.name));
 
   if (!visibleStocks.length) {
@@ -905,17 +908,20 @@ function handleStockSupplierSearch() {
 function handleSupplierListSearch() {
   if (!el.supplierSearchInput || !el.supplierSearchSuggestionsBox) return;
   const query = el.supplierSearchInput.value.trim().toLowerCase();
-  if (!query) {
-    el.supplierSearchSuggestionsBox.style.display = "none";
+
+  const matches = (query
+    ? state.suppliers.filter(s => s.name.toLowerCase().includes(query))
+    : [...state.suppliers]
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!state.suppliers.length) {
+    el.supplierSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers added yet.</div>`;
+    el.supplierSearchSuggestionsBox.style.display = "block";
     return;
   }
 
-  const matches = state.suppliers.filter((supplier) =>
-    supplier.name.toLowerCase().includes(query)
-  );
-
   if (!matches.length) {
-    el.supplierSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers match your search.</div>`;
+    el.supplierSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers match "${escapeHtml(query)}"</div>`;
     el.supplierSearchSuggestionsBox.style.display = "block";
     return;
   }
@@ -932,17 +938,23 @@ function handleSupplierListSearch() {
 function handleStockSearchInput() {
   if (!el.stockSearch || !el.stockSearchSuggestionsBox) return;
   const query = el.stockSearch.value.trim().toLowerCase();
-  if (!query) {
-    el.stockSearchSuggestionsBox.style.display = "none";
+
+  const matches = (query
+    ? state.stocks.filter((item) =>
+        item.name.toLowerCase().includes(query) ||
+        supplierName(item.supplierId).toLowerCase().includes(query)
+      )
+    : [...state.stocks]
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!state.stocks.length) {
+    el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No stock items added yet.</div>`;
+    el.stockSearchSuggestionsBox.style.display = "block";
     return;
   }
 
-  const matches = state.stocks.filter((item) =>
-    item.name.toLowerCase().includes(query) || supplierName(item.supplierId).toLowerCase().includes(query)
-  );
-
   if (!matches.length) {
-    el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No items match your search.</div>`;
+    el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No items match "${escapeHtml(query)}"</div>`;
     el.stockSearchSuggestionsBox.style.display = "block";
     return;
   }
@@ -951,7 +963,7 @@ function handleStockSearchInput() {
     .map((item) => `
       <div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}">
         <strong>${escapeHtml(item.name)}</strong>
-        <span class="vendor-tag">Supplier: ${escapeHtml(supplierName(item.supplierId))}</span>
+        <span class="vendor-tag">${escapeHtml(supplierName(item.supplierId))}</span>
       </div>
     `).join("");
   el.stockSearchSuggestionsBox.style.display = "block";
@@ -1190,6 +1202,36 @@ function openAddToOrderModal(item) {
   setTimeout(() => {
     if (el.editQtyInput) { el.editQtyInput.focus(); el.editQtyInput.select(); }
   }, 50);
+}
+
+// ---------- Reusable confirm modal ----------
+// Usage: const yes = await showConfirm("Title", "Message", "Button label");
+let _confirmResolve = null;
+
+function showConfirm(title, body, okLabel = "Delete", okDanger = true) {
+  return new Promise((resolve) => {
+    _confirmResolve = resolve;
+    if (el.confirmModalTitle) el.confirmModalTitle.textContent = title;
+    if (el.confirmModalBody) el.confirmModalBody.textContent = body;
+    if (el.confirmModalOkBtn) {
+      el.confirmModalOkBtn.textContent = okLabel;
+      el.confirmModalOkBtn.style.background = okDanger ? "var(--danger)" : "var(--primary)";
+    }
+    if (el.confirmModal) el.confirmModal.style.display = "flex";
+  });
+}
+
+function _closeConfirmModal(result) {
+  if (el.confirmModal) el.confirmModal.style.display = "none";
+  if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
+}
+
+if (el.confirmModalOkBtn) el.confirmModalOkBtn.addEventListener("click", () => _closeConfirmModal(true));
+if (el.confirmModalCancelBtn) el.confirmModalCancelBtn.addEventListener("click", () => _closeConfirmModal(false));
+if (el.confirmModal) {
+  el.confirmModal.addEventListener("click", (e) => {
+    if (e.target === el.confirmModal) _closeConfirmModal(false);
+  });
 }
 
 function closeAlreadyInListModal() {
@@ -1516,7 +1558,7 @@ function updateBulkDeleteToolbarState() {
   }
 }
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   if (isLongPressTriggered) {
     isLongPressTriggered = false;
     return;
@@ -1528,7 +1570,7 @@ document.addEventListener("click", (event) => {
   const action = button.dataset.action;
 
   if (action === "remove-line") {
-    if (confirm("Delete this profile item permanently?")) {
+    if (await showConfirm("Remove Item", "Are you sure you want to permanently delete this order item?")) {
       state.order = state.order.filter((line) => line.id !== id);
       saveState();
       syncToSupabase("orders", "delete", { ids: [id] });
@@ -1551,16 +1593,45 @@ document.addEventListener("click", (event) => {
   }
 
   if (action === "delete-supplier") {
-    if (confirm("Delete this supplier? This will also remove all their associated stock catalog listings and order entries.")) {
-      state.suppliers = state.suppliers.filter((s) => s.id !== id);
-      state.stocks = state.stocks.filter((item) => item.supplierId !== id);
-      state.order = state.order.filter((line) => line.supplierId !== id);
-      saveState();
-      syncToSupabase("orders", "deleteWhere", { match: { supplier_id: id } });
-      syncToSupabase("stocks", "deleteWhere", { match: { supplier_id: id } });
-      syncToSupabase("suppliers", "delete", { ids: [id] });
-      render();
+    const supplier = state.suppliers.find(s => s.id === id);
+    if (!supplier) return;
+
+    const supplierStockIds = state.stocks.filter(s => s.supplierId === id).map(s => s.id);
+    const ordersCount = supplierStockIds.filter(stockId =>
+      state.order.some(line => line.itemId === stockId)
+    ).length;
+
+    if (ordersCount > 0) {
+      // Block — items are in orders
+      await showConfirm(
+        "Cannot Delete Supplier",
+        `${ordersCount} stock item${ordersCount === 1 ? "" : "s"} from this supplier ${ordersCount === 1 ? "is" : "are"} still present in your orders.\n\nPlease remove ${ordersCount === 1 ? "it" : "them"} from your Active or Completed orders first, then delete the stock items, and then you can delete this supplier.`,
+        "OK",
+        false
+      );
+      return;
     }
+
+    if (supplierStockIds.length) {
+      if (!await showConfirm(
+        "Delete Supplier",
+        `This supplier has ${supplierStockIds.length} stock item${supplierStockIds.length === 1 ? "" : "s"} linked to them. Deleting this supplier will also permanently delete all their stock items.`
+      )) return;
+    } else {
+      if (!await showConfirm(
+        "Delete Supplier",
+        `Delete "${supplier.name}"? This cannot be undone.`
+      )) return;
+    }
+
+    state.suppliers = state.suppliers.filter((s) => s.id !== id);
+    state.stocks = state.stocks.filter((item) => item.supplierId !== id);
+    state.order = state.order.filter((line) => line.supplierId !== id);
+    saveState();
+    syncToSupabase("orders", "deleteWhere", { match: { supplier_id: id } });
+    syncToSupabase("stocks", "deleteWhere", { match: { supplier_id: id } });
+    syncToSupabase("suppliers", "delete", { ids: [id] });
+    render();
   }
 });
 
@@ -1573,14 +1644,14 @@ if (el.backToMasterBtn) {
 }
 
 if (el.toggleStatusStateBtn) {
-  el.toggleStatusStateBtn.addEventListener("click", () => {
+  el.toggleStatusStateBtn.addEventListener("click", async () => {
     if (!focusedSupplierId) return;
     if (currentStatusFilter === "active") {
-      if (confirm("Move this entire purchase list to completed orders?")) {
+      if (await showConfirm("Send Order", "Move this entire purchase list to completed orders?", "Move to Completed", false)) {
         toggleActiveCompletedState(focusedSupplierId, "completed");
       }
     } else {
-      if (confirm("Move this entire purchase list back to active order lists?")) {
+      if (await showConfirm("Revert Order", "Move this entire purchase list back to active order lists?", "Move to Active", false)) {
         toggleActiveCompletedState(focusedSupplierId, "active", focusedBatchId);
       }
     }
@@ -1588,11 +1659,14 @@ if (el.toggleStatusStateBtn) {
 }
 
 if (el.bulkDeleteExecuteBtn) {
-  el.bulkDeleteExecuteBtn.addEventListener("click", () => {
+  el.bulkDeleteExecuteBtn.addEventListener("click", async () => {
     const selectedBoxes = el.deepViewLinesList.querySelectorAll(".multi-delete-checkbox:checked");
     if (!selectedBoxes.length) return;
 
-    if (confirm(`Are you sure you want to delete these ${selectedBoxes.length} selected items from your order?`)) {
+    if (await showConfirm(
+      "Delete Items",
+      `Remove these ${selectedBoxes.length} selected item${selectedBoxes.length === 1 ? "" : "s"} from your active order?`
+    )) {
       const idsToDelete = Array.from(selectedBoxes).map(box => box.dataset.lineId);
       state.order = state.order.filter(line => !idsToDelete.includes(line.id));
       saveState();
@@ -1617,11 +1691,14 @@ if (el.bulkDeleteCancelBtn) {
 }
 
 if (el.masterBulkDeleteExecuteBtn) {
-  el.masterBulkDeleteExecuteBtn.addEventListener("click", () => {
+  el.masterBulkDeleteExecuteBtn.addEventListener("click", async () => {
     const selectedBoxes = el.bifurcatedOrderContainer.querySelectorAll(".master-multi-delete-checkbox:checked");
     if (!selectedBoxes.length) return;
 
-    if (confirm(`Are you sure you want to permanently delete these ${selectedBoxes.length} selected completed order(s)?`)) {
+    if (await showConfirm(
+      "Delete Completed Orders",
+      `Permanently delete ${selectedBoxes.length} selected completed order${selectedBoxes.length === 1 ? "" : "s"}? This cannot be undone.`
+    )) {
       const pairsToDelete = new Set(
         Array.from(selectedBoxes).map(box => `${box.dataset.supplierId}::${box.dataset.batchId || ""}`)
       );
@@ -1733,6 +1810,9 @@ document.addEventListener("click", (event) => {
   if (el.supplierSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) {
     el.supplierSearchSuggestionsBox.style.display = "none";
   }
+  if (el.supplierFilterSuggestionsBox && !event.target.closest(".search-suggest-container")) {
+    el.supplierFilterSuggestionsBox.style.display = "none";
+  }
 });
 
 if (el.orderItemSearchInput) {
@@ -1760,6 +1840,16 @@ if (el.stockForm) {
     }
 
     // stockForm is now add-only; editing goes through the edit stock modal
+
+    // Duplicate check — same name (case-insensitive) already exists
+    const duplicate = state.stocks.find(
+      s => s.name.trim().toLowerCase() === name.toLowerCase()
+    );
+    if (duplicate) {
+      alert(`"${name}" already exists in your stock list. If you want to update its details, use the ✏️ edit button on that item instead.`);
+      return;
+    }
+
     const newStock = { id: generateUUID(), name, supplierId, unit };
     state.stocks.push(newStock);
     syncToSupabase("stocks", "upsert", { rows: [stockToDb(newStock)] });
@@ -1779,6 +1869,16 @@ if (el.supplierForm) {
     const phone = document.querySelector("#supplierPhone").value.trim().replace(/[^0-9+]/g, "");
 
     // supplierForm is now add-only; editing goes through the edit supplier modal
+
+    // Duplicate check — same name (case-insensitive) already exists
+    const duplicate = state.suppliers.find(
+      s => s.name.trim().toLowerCase() === name.toLowerCase()
+    );
+    if (duplicate) {
+      alert(`"${name}" already exists in your supplier list. If you want to update their details, use the ✏️ edit button on that supplier instead.`);
+      return;
+    }
+
     const newSupplier = { id: generateUUID(), name, email, phone };
     state.suppliers.push(newSupplier);
     syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] });
@@ -1843,17 +1943,35 @@ if (el.stockBulkDeleteCancelBtn) {
 }
 
 if (el.stockBulkDeleteExecuteBtn) {
-  el.stockBulkDeleteExecuteBtn.addEventListener("click", () => {
+  el.stockBulkDeleteExecuteBtn.addEventListener("click", async () => {
     const checked = el.stockTable.querySelectorAll(".stock-delete-checkbox:checked");
     if (!checked.length) return;
-    if (!confirm(`Delete ${checked.length} selected stock item${checked.length === 1 ? "" : "s"}? This will also remove them from any active orders.`)) return;
 
     const ids = Array.from(checked).map(cb => cb.dataset.itemId);
+
+    // Check if any selected item appears in any order (active or completed)
+    const blockedItems = ids.filter(id =>
+      state.order.some(line => line.itemId === id)
+    );
+
+    if (blockedItems.length) {
+      await showConfirm(
+        "Cannot Delete",
+        `${blockedItems.length} selected item${blockedItems.length === 1 ? "" : "s"} ${blockedItems.length === 1 ? "is" : "are"} present in your Active or Completed orders.\n\nRemove ${blockedItems.length === 1 ? "it" : "them"} from your orders first, then try deleting again.`,
+        "OK",
+        false
+      );
+      return;
+    }
+
+    if (!await showConfirm(
+      "Delete Stock Items",
+      `Permanently delete ${ids.length} selected stock item${ids.length === 1 ? "" : "s"}? This cannot be undone.`
+    )) return;
+
     state.stocks = state.stocks.filter(s => !ids.includes(s.id));
-    state.order = state.order.filter(l => !ids.includes(l.itemId));
     saveState();
     ids.forEach(id => {
-      syncToSupabase("orders", "deleteWhere", { match: { item_id: id } });
       syncToSupabase("stocks", "delete", { ids: [id] });
     });
     hideStockBulkDeleteBar();
@@ -1898,7 +2016,44 @@ if (el.stockSearch) {
   });
   el.stockSearch.addEventListener("focus", handleStockSearchInput);
 }
-if (el.supplierFilter) el.supplierFilter.addEventListener("change", renderStockTable);
+if (el.supplierFilter) {
+  const showSupplierFilterSuggestions = () => {
+    if (!el.supplierFilterSuggestionsBox) return;
+    const query = el.supplierFilter.value.trim().toLowerCase();
+
+    const matches = (query
+      ? state.suppliers.filter(s => s.name.toLowerCase().includes(query))
+      : [...state.suppliers]
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    if (!matches.length) {
+      el.supplierFilterSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers match</div>`;
+    } else {
+      const allOption = `<div class="suggestion-item" data-name="" style="color:var(--muted);">Show all suppliers</div>`;
+      el.supplierFilterSuggestionsBox.innerHTML = allOption + matches.map(s =>
+        `<div class="suggestion-item" data-name="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong></div>`
+      ).join("");
+    }
+    el.supplierFilterSuggestionsBox.style.display = "block";
+  };
+
+  el.supplierFilter.addEventListener("input", () => {
+    showSupplierFilterSuggestions();
+    renderStockTable();
+  });
+  el.supplierFilter.addEventListener("focus", showSupplierFilterSuggestions);
+}
+
+if (el.supplierFilterSuggestionsBox) {
+  el.supplierFilterSuggestionsBox.addEventListener("mousedown", (event) => {
+    const item = event.target.closest(".suggestion-item");
+    if (!item) return;
+    event.preventDefault();
+    el.supplierFilter.value = item.dataset.name || "";
+    el.supplierFilterSuggestionsBox.style.display = "none";
+    renderStockTable();
+  });
+}
 
 if (el.stockSearchSuggestionsBox) {
   el.stockSearchSuggestionsBox.addEventListener("mousedown", (event) => {
@@ -1907,11 +2062,10 @@ if (el.stockSearchSuggestionsBox) {
 
     event.preventDefault();
 
-    const item = state.stocks.find((s) => s.id === suggestionItem.dataset.id);
-    if (!item) return;
-
-    selectQuickOrderItem(item);
+    // Fill the search box with the selected item name and filter the table
+    if (el.stockSearch) el.stockSearch.value = suggestionItem.dataset.name || "";
     el.stockSearchSuggestionsBox.style.display = "none";
+    renderStockTable();
   });
 }
 
@@ -2301,15 +2455,15 @@ if (el.importDataInput) {
       let success = false;
 
       if (fileName.endsWith(".json")) {
-        if (confirm("Importing this backup will replace ALL current data (suppliers, stock items, and orders). Continue?")) {
+        if (await showConfirm("Import Backup", "This will replace ALL current data — suppliers, stock items, and orders. This cannot be undone.", "Import", true)) {
           success = await importFromJsonText(text);
         }
       } else if (fileName.endsWith(".xls")) {
-        if (confirm("This will add any new stock items from this Excel file, and update existing items that match by name. Your current stock list, suppliers, and orders won't be removed. Continue?")) {
+        if (await showConfirm("Import Excel", "This will add new stock items and update existing ones that match by name. Your current orders will not be affected.", "Import", false)) {
           success = importFromExcelHtml(text);
         }
       } else {
-        if (confirm("This will add any new stock items from this CSV file, and update existing items that match by name. Your current stock list, suppliers, and orders won't be removed. Continue?")) {
+        if (await showConfirm("Import CSV", "This will add new stock items and update existing ones that match by name. Your current orders will not be affected.", "Import", false)) {
           success = importFromCsvText(text);
         }
       }
