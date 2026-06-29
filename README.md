@@ -1,7 +1,5 @@
 # Shop Stock Order App
 
-Open `index.html` in a browser, or use the local preview link if Codex has started one.
-
 ## What it does
 
 - Saves suppliers with email and phone details.
