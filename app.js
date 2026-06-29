@@ -1602,10 +1602,10 @@ document.addEventListener("click", async (event) => {
     ).length;
 
     if (ordersCount > 0) {
-      // Block — items are in orders
+      // Block — items are still in orders
       await showConfirm(
         "Cannot Delete Supplier",
-        `${ordersCount} stock item${ordersCount === 1 ? "" : "s"} from this supplier ${ordersCount === 1 ? "is" : "are"} still present in your orders.\n\nPlease remove ${ordersCount === 1 ? "it" : "them"} from your Active or Completed orders first, then delete the stock items, and then you can delete this supplier.`,
+        `${ordersCount} stock item${ordersCount === 1 ? "" : "s"} from this supplier ${ordersCount === 1 ? "is" : "are"} still present in your orders.\n\nPlease remove ${ordersCount === 1 ? "it" : "them"} from your Active or Completed orders first, then delete the stock items from Stock Details, and then you can delete this supplier.`,
         "OK",
         false
       );
@@ -1613,23 +1613,25 @@ document.addEventListener("click", async (event) => {
     }
 
     if (supplierStockIds.length) {
-      if (!await showConfirm(
-        "Delete Supplier",
-        `This supplier has ${supplierStockIds.length} stock item${supplierStockIds.length === 1 ? "" : "s"} linked to them. Deleting this supplier will also permanently delete all their stock items.`
-      )) return;
-    } else {
-      if (!await showConfirm(
-        "Delete Supplier",
-        `Delete "${supplier.name}"? This cannot be undone.`
-      )) return;
+      // Block — supplier still has stock items (none in orders, but must be cleared first)
+      await showConfirm(
+        "Cannot Delete Supplier",
+        `This supplier has ${supplierStockIds.length} stock item${supplierStockIds.length === 1 ? "" : "s"} linked to them.\n\nPlease go to Stock Details, delete ${supplierStockIds.length === 1 ? "that item" : "those items"} first, and then you can delete this supplier.`,
+        "OK",
+        false
+      );
+      return;
     }
 
+    // Safe to delete — no stock items at all
+    if (!await showConfirm(
+      "Delete Supplier",
+      `Delete "${supplier.name}"? This cannot be undone.`
+    )) return;
+
     state.suppliers = state.suppliers.filter((s) => s.id !== id);
-    state.stocks = state.stocks.filter((item) => item.supplierId !== id);
     state.order = state.order.filter((line) => line.supplierId !== id);
     saveState();
-    syncToSupabase("orders", "deleteWhere", { match: { supplier_id: id } });
-    syncToSupabase("stocks", "deleteWhere", { match: { supplier_id: id } });
     syncToSupabase("suppliers", "delete", { ids: [id] });
     render();
   }
