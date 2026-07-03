@@ -668,11 +668,12 @@ function setupStockTableLongPress() {
         cb.style.pointerEvents = "auto";
       });
       showStockBulkDeleteBar();
-      // auto-check the row that was held
       const cb = row.querySelector(".stock-delete-checkbox");
       if (cb) cb.checked = true;
       updateStockBulkDeleteBar();
     };
+
+    let touchStartX = 0, touchStartY = 0;
 
     row.addEventListener("mousedown", (e) => {
       if (e.target.closest("button")) return;
@@ -680,10 +681,18 @@ function setupStockTableLongPress() {
     });
     row.addEventListener("touchstart", (e) => {
       if (e.target.closest("button")) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
       stockTableLongPressTimer = setTimeout(onLongPress, 600);
+    }, { passive: true });
+    row.addEventListener("touchmove", (e) => {
+      const dx = Math.abs(e.touches[0].clientX - touchStartX);
+      const dy = Math.abs(e.touches[0].clientY - touchStartY);
+      if (dx > 8 || dy > 8) clearTimeout(stockTableLongPressTimer);
     }, { passive: true });
     row.addEventListener("mouseup", () => clearTimeout(stockTableLongPressTimer));
     row.addEventListener("touchend", () => clearTimeout(stockTableLongPressTimer));
+    row.addEventListener("touchcancel", () => clearTimeout(stockTableLongPressTimer));
     row.addEventListener("mouseleave", () => clearTimeout(stockTableLongPressTimer));
 
     row.addEventListener("click", (e) => {
@@ -1079,7 +1088,17 @@ function setupMasterLongPressTriggers() {
     row.addEventListener("mouseup", cancelMasterLongPress);
     row.addEventListener("mouseleave", cancelMasterLongPress);
     
-    row.addEventListener("touchstart", (e) => startMasterLongPress(e, row), { passive: true });
+    let masterTouchStartX = 0, masterTouchStartY = 0;
+    row.addEventListener("touchstart", (e) => {
+      masterTouchStartX = e.touches[0].clientX;
+      masterTouchStartY = e.touches[0].clientY;
+      startMasterLongPress(e, row);
+    }, { passive: true });
+    row.addEventListener("touchmove", (e) => {
+      const dx = Math.abs(e.touches[0].clientX - masterTouchStartX);
+      const dy = Math.abs(e.touches[0].clientY - masterTouchStartY);
+      if (dx > 8 || dy > 8) cancelMasterLongPress();
+    }, { passive: true });
     row.addEventListener("touchend", cancelMasterLongPress);
     row.addEventListener("touchcancel", cancelMasterLongPress);
   });
@@ -1138,7 +1157,17 @@ function setupDeepViewLongPressTriggers() {
     card.addEventListener("mouseup", cancelDeepLongPress);
     card.addEventListener("mouseleave", cancelDeepLongPress);
     
-    card.addEventListener("touchstart", (e) => startDeepLongPress(e, card), { passive: true });
+    let deepTouchStartX = 0, deepTouchStartY = 0;
+    card.addEventListener("touchstart", (e) => {
+      deepTouchStartX = e.touches[0].clientX;
+      deepTouchStartY = e.touches[0].clientY;
+      startDeepLongPress(e, card);
+    }, { passive: true });
+    card.addEventListener("touchmove", (e) => {
+      const dx = Math.abs(e.touches[0].clientX - deepTouchStartX);
+      const dy = Math.abs(e.touches[0].clientY - deepTouchStartY);
+      if (dx > 8 || dy > 8) cancelDeepLongPress();
+    }, { passive: true });
     card.addEventListener("touchend", cancelDeepLongPress);
     card.addEventListener("touchcancel", cancelDeepLongPress);
   });
