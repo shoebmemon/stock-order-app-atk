@@ -634,7 +634,7 @@ function renderStockTable() {
 
   el.stockTable.innerHTML = visibleStocks
     .map((item) => `
-      <tr class="stock-table-row" data-item-id="${item.id}" style="cursor: pointer;">
+      <tr class="stock-table-row" data-item-id="${item.id}" style="cursor: pointer; user-select: none; -webkit-user-select: none;">
         <td data-label="Item">
           <div style="display: flex; align-items: center; gap: 8px;">
             <input type="checkbox" class="stock-delete-checkbox" data-item-id="${item.id}"

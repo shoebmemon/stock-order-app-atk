@@ -249,6 +249,8 @@ table {
   min-width: 680px;
   border-collapse: collapse;
   background: #fff;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 th,
