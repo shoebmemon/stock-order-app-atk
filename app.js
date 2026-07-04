@@ -1313,8 +1313,28 @@ function saveEditStockModal() {
   const supplierId = el.editStockHiddenSupplierId?.value;
   const unit = formatUnit(el.editStockUnit?.value);
 
-  if (!name) { alert("Please enter an item name."); return; }
-  if (!supplierId) { alert("Please select a supplier from the list."); return; }
+  if (!name) {
+    showConfirm("Missing Name", "Please enter an item name.", "OK", false);
+    return;
+  }
+  if (!supplierId) {
+    showConfirm("Missing Supplier", "Please select a supplier from the list.", "OK", false);
+    return;
+  }
+
+  // Duplicate check — another item with the same name already exists (exclude the one being edited)
+  const duplicate = state.stocks.find(
+    s => s.id !== editingStockModalId && s.name.trim().toLowerCase() === name.toLowerCase()
+  );
+  if (duplicate) {
+    showConfirm(
+      "Name Already Exists",
+      `"${name}" is already in your stock list.\n\nPlease use a different name for this item.`,
+      "OK",
+      false
+    );
+    return;
+  }
 
   const item = state.stocks.find(s => s.id === editingStockModalId);
   if (!item) { closeEditStockModal(); return; }
@@ -1876,7 +1896,12 @@ if (el.stockForm) {
       s => s.name.trim().toLowerCase() === name.toLowerCase()
     );
     if (duplicate) {
-      alert(`"${name}" already exists in your stock list. If you want to update its details, use the ✏️ edit button on that item instead.`);
+      showConfirm(
+        "Item Already Exists",
+        `"${name}" is already in your stock list.\n\nIf you want to update its details, use the ✏️ edit button on that item instead.`,
+        "OK",
+        false
+      );
       return;
     }
 
