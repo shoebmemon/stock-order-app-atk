@@ -323,18 +323,23 @@
         background: #fff5f5;
         border: 1px solid #feb2b2;
         border-radius: 6px;
-        padding: 10px 12px;
-        margin-bottom: 12px;
+        padding: 12px 16px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         flex-wrap: nowrap;
         gap: 8px;
-        animation: fadeIn 0.2s ease-in-out;
+        margin-bottom: 10px;
+        /* Sticky just above the list — stays visible while scrolling within the panel */
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 2px 10px rgba(197, 48, 48, 0.15);
+        animation: slideDown 0.18s ease-out;
       }
-      @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-5px); }
-        to { opacity: 1; transform: translateY(0); }
+      @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-8px); }
+        to   { opacity: 1; transform: translateY(0); }
       }
 
       .qty-input-container {
@@ -443,7 +448,7 @@
           </div>
 
           <div id="orderDetailsMasterView">
-            <div id="masterBulkDeleteToolbar" class="bulk-delete-bar" style="display: none; margin-bottom: 12px;">
+            <div id="masterBulkDeleteToolbar" class="bulk-delete-bar" style="display: none;">
               <span id="masterBulkDeleteCountLabel" style="color: #c53030; font-size: 0.88rem; font-weight: 700; flex-shrink: 0;">0 orders selected</span>
               <div style="display: flex; gap: 8px; flex-shrink: 0;">
                 <button id="masterBulkDeleteCancelBtn" type="button" class="secondary small-action" style="white-space: nowrap;">Cancel</button>
@@ -546,7 +551,7 @@
             </div>
             <div id="stockQuickOrderAlert" style="display: none; margin-bottom: 12px"></div>
 
-            <div id="stockBulkDeleteBar" class="bulk-delete-bar" style="display: none; margin-bottom: 12px;">
+            <div id="stockBulkDeleteBar" class="bulk-delete-bar" style="display: none;">
               <span id="stockBulkDeleteCount" style="font-weight: 700; font-size: 0.9rem;">0 selected</span>
               <div style="display: flex; gap: 8px;">
                 <button type="button" id="stockBulkDeleteCancelBtn" class="secondary small-action">Cancel</button>
@@ -737,6 +742,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=39"></script>
+    <script src="app.js?v=43"></script>
   </body>
 </html>

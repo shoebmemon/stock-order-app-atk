@@ -1717,7 +1717,6 @@ if (el.bulkDeleteCancelBtn) {
     }
     if (el.bulkDeleteToolbar) el.bulkDeleteToolbar.style.display = "none";
     if (el.deepView) el.deepView.classList.remove("selection-active");
-    if (el.bulkDeleteCountLabel) el.bulkDeleteCountLabel.textContent = "0 items selected";
   });
 }
 
