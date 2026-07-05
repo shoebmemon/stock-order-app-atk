@@ -10,7 +10,7 @@
     <title>Shop Stock Order App</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=20" />
+    <link rel="stylesheet" href="styles.css?v=21" />
     <style>
       /* Sub-navigation tabs layout inside Add Data */
       .sub-nav-tabs {
@@ -51,6 +51,10 @@
         justify-content: center;
         z-index: 2000;
         padding: 20px;
+      }
+      /* Confirm/alert modal must always appear above all other modals */
+      #confirmModal {
+        z-index: 3000;
       }
       .modal-card {
         background: #fff;
@@ -742,6 +746,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=43"></script>
+    <script src="app.js?v=45"></script>
   </body>
 </html>
