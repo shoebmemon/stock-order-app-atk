@@ -373,6 +373,15 @@ const el = {
   editStockUnit: document.querySelector("#editStockUnit"),
   editStockCancelBtn: document.querySelector("#editStockCancelBtn"),
   editStockSaveBtn: document.querySelector("#editStockSaveBtn"),
+  editStockQuickAddSupplierBtn: document.querySelector("#editStockQuickAddSupplierBtn"),
+
+  quickAddSupplierBtn: document.querySelector("#quickAddSupplierBtn"),
+  quickAddSupplierModal: document.querySelector("#quickAddSupplierModal"),
+  quickSupplierName: document.querySelector("#quickSupplierName"),
+  quickSupplierEmail: document.querySelector("#quickSupplierEmail"),
+  quickSupplierPhone: document.querySelector("#quickSupplierPhone"),
+  quickAddSupplierCancelBtn: document.querySelector("#quickAddSupplierCancelBtn"),
+  quickAddSupplierSaveBtn: document.querySelector("#quickAddSupplierSaveBtn"),
 
   editSupplierModal: document.querySelector("#editSupplierModal"),
   editSupplierName: document.querySelector("#editSupplierName"),
@@ -1300,6 +1309,97 @@ function openEditStockModal(item) {
   if (el.editStockUnit) el.editStockUnit.value = item.unit || "";
   if (el.editStockModal) el.editStockModal.style.display = "flex";
   setTimeout(() => { if (el.editStockName) { el.editStockName.focus(); } }, 50);
+}
+
+// ---------- Quick Add Supplier Modal ----------
+// Opened from the + button in the supplier search fields on the Add/Edit Stock forms.
+// After saving, auto-selects the new supplier in whichever search field triggered it.
+
+let _quickAddSupplierCallerSearchInput = null;
+let _quickAddSupplierCallerHiddenInput = null;
+
+function openQuickAddSupplierModal(searchInput, hiddenInput) {
+  _quickAddSupplierCallerSearchInput = searchInput;
+  _quickAddSupplierCallerHiddenInput = hiddenInput;
+
+  // Pre-fill the name with whatever the user already typed in the search box
+  const prefill = searchInput?.value.trim() || "";
+  if (el.quickSupplierName) el.quickSupplierName.value = prefill;
+  if (el.quickSupplierEmail) el.quickSupplierEmail.value = "";
+  if (el.quickSupplierPhone) el.quickSupplierPhone.value = "";
+  if (el.quickAddSupplierModal) el.quickAddSupplierModal.style.display = "flex";
+  setTimeout(() => { if (el.quickSupplierName) el.quickSupplierName.focus(); }, 50);
+}
+
+function closeQuickAddSupplierModal() {
+  if (el.quickAddSupplierModal) el.quickAddSupplierModal.style.display = "none";
+  _quickAddSupplierCallerSearchInput = null;
+  _quickAddSupplierCallerHiddenInput = null;
+}
+
+function saveQuickAddSupplierModal() {
+  const name = el.quickSupplierName?.value.trim();
+  const email = el.quickSupplierEmail?.value.trim() || "";
+  const phone = (el.quickSupplierPhone?.value.trim() || "").replace(/[^0-9+]/g, "");
+
+  if (!name) {
+    showConfirm("Missing Name", "Please enter a supplier name.", "OK", false);
+    return;
+  }
+
+  // Duplicate check
+  const duplicate = state.suppliers.find(
+    s => s.name.trim().toLowerCase() === name.toLowerCase()
+  );
+  if (duplicate) {
+    // Already exists — just select it in the calling field
+    if (_quickAddSupplierCallerSearchInput) _quickAddSupplierCallerSearchInput.value = duplicate.name;
+    if (_quickAddSupplierCallerHiddenInput) _quickAddSupplierCallerHiddenInput.value = duplicate.id;
+    closeQuickAddSupplierModal();
+    return;
+  }
+
+  const newSupplier = { id: generateUUID(), name, email, phone };
+  state.suppliers.push(newSupplier);
+  saveState();
+  syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] });
+  renderSupplierOptions();
+  renderSupplierList();
+
+  // Auto-select the new supplier in whichever search field triggered the modal
+  if (_quickAddSupplierCallerSearchInput) _quickAddSupplierCallerSearchInput.value = newSupplier.name;
+  if (_quickAddSupplierCallerHiddenInput) _quickAddSupplierCallerHiddenInput.value = newSupplier.id;
+
+  closeQuickAddSupplierModal();
+}
+
+if (el.quickAddSupplierSaveBtn) el.quickAddSupplierSaveBtn.addEventListener("click", saveQuickAddSupplierModal);
+if (el.quickAddSupplierCancelBtn) el.quickAddSupplierCancelBtn.addEventListener("click", closeQuickAddSupplierModal);
+if (el.quickAddSupplierModal) {
+  el.quickAddSupplierModal.addEventListener("click", (e) => {
+    if (e.target === el.quickAddSupplierModal) closeQuickAddSupplierModal();
+  });
+}
+if (el.quickSupplierName) {
+  el.quickSupplierName.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveQuickAddSupplierModal(); }
+  });
+}
+
+// Wire the + buttons to the modal
+if (el.quickAddSupplierBtn) {
+  el.quickAddSupplierBtn.addEventListener("click", () => {
+    openQuickAddSupplierModal(
+      document.querySelector("#stockSupplierSearchInput"),
+      document.querySelector("#hiddenStockSupplierId")
+    );
+  });
+}
+
+if (el.editStockQuickAddSupplierBtn) {
+  el.editStockQuickAddSupplierBtn.addEventListener("click", () => {
+    openQuickAddSupplierModal(el.editStockSupplierSearch, el.editStockHiddenSupplierId);
+  });
 }
 
 function closeEditStockModal() {

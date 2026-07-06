@@ -521,10 +521,17 @@
               </label>
               <label>
                 Supplier
-                <div class="search-suggest-container">
-                  <input id="stockSupplierSearchInput" type="text" placeholder="🔍 Type supplier name to filter..." autocomplete="off" required />
-                  <input id="hiddenStockSupplierId" type="hidden" required />
-                  <div id="supplierSuggestionsBox" class="search-suggestions-box"></div>
+                <div style="display: flex; gap: 6px; align-items: flex-start;">
+                  <div class="search-suggest-container" style="flex: 1 1 0; min-width: 0;">
+                    <input id="stockSupplierSearchInput" type="text" placeholder="🔍 Type supplier name to filter..." autocomplete="off" required />
+                    <input id="hiddenStockSupplierId" type="hidden" required />
+                    <div id="supplierSuggestionsBox" class="search-suggestions-box"></div>
+                  </div>
+                  <button type="button" id="quickAddSupplierBtn" title="Add new supplier" style="
+                    flex-shrink: 0; width: 42px; height: 42px; border-radius: 6px;
+                    background: var(--primary); color: #fff; border: none;
+                    font-size: 1.4rem; cursor: pointer; display: flex;
+                    align-items: center; justify-content: center; line-height: 1;">+</button>
                 </div>
               </label>
               <button id="stockSubmitBtn" class="primary full-row" type="submit">Save Stock Item</button>
@@ -664,6 +671,32 @@
       </div>
     </div>
 
+    <!-- Quick Add Supplier Modal — opened from + button in supplier search fields -->
+    <div id="quickAddSupplierModal" class="modal-overlay" style="display: none; z-index: 3000;">
+      <div class="modal-card" style="max-width: 380px;">
+        <h2 style="margin: 0 0 4px; font-size: 1.1rem;">Add New Supplier</h2>
+        <p class="subtle" style="margin: 0 0 16px; font-size: 0.85rem;">Email and phone are optional.</p>
+        <div class="compact-form">
+          <label>
+            Supplier Name <span style="color: var(--danger);">*</span>
+            <input type="text" id="quickSupplierName" autocomplete="off" placeholder="e.g. Sunrise Traders" />
+          </label>
+          <label>
+            Email
+            <input type="email" id="quickSupplierEmail" autocomplete="off" placeholder="orders@example.com" />
+          </label>
+          <label>
+            Phone
+            <input type="text" id="quickSupplierPhone" autocomplete="off" placeholder="e.g. 9876543210" />
+          </label>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 18px;">
+          <button type="button" class="secondary" id="quickAddSupplierCancelBtn" style="flex: 1;">Cancel</button>
+          <button type="button" class="primary" id="quickAddSupplierSaveBtn" style="flex: 1;">Add Supplier</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Edit Stock Modal -->
     <div id="editStockModal" class="modal-overlay" style="display: none">
       <div class="modal-card" style="max-width: 420px;">
@@ -679,10 +712,17 @@
           </label>
           <label>
             Supplier
-            <div class="search-suggest-container">
-              <input id="editStockSupplierSearch" type="text" placeholder="🔍 Type supplier name to filter..." autocomplete="off" />
-              <input id="editStockHiddenSupplierId" type="hidden" />
-              <div id="editStockSupplierSuggestionsBox" class="search-suggestions-box"></div>
+            <div style="display: flex; gap: 6px; align-items: flex-start;">
+              <div class="search-suggest-container" style="flex: 1 1 0; min-width: 0;">
+                <input id="editStockSupplierSearch" type="text" placeholder="🔍 Type supplier name to filter..." autocomplete="off" />
+                <input id="editStockHiddenSupplierId" type="hidden" />
+                <div id="editStockSupplierSuggestionsBox" class="search-suggestions-box"></div>
+              </div>
+              <button type="button" id="editStockQuickAddSupplierBtn" title="Add new supplier" style="
+                flex-shrink: 0; width: 42px; height: 42px; border-radius: 6px;
+                background: var(--primary); color: #fff; border: none;
+                font-size: 1.4rem; cursor: pointer; display: flex;
+                align-items: center; justify-content: center; line-height: 1;">+</button>
             </div>
           </label>
         </div>
@@ -746,6 +786,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=45"></script>
+    <script src="app.js?v=46"></script>
   </body>
 </html>
