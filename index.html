@@ -346,6 +346,36 @@
         to   { opacity: 1; transform: translateY(0); }
       }
 
+      .supplier-search-container {
+        position: relative;
+        width: 100%;
+      }
+      .supplier-search-container input {
+        padding-right: 44px !important;
+      }
+      .supplier-quick-add-btn {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        font-size: 1.2rem;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .supplier-quick-add-btn:hover {
+        background: var(--primary-strong);
+      }
+
       .qty-input-container {
         position: relative;
         display: flex;
@@ -521,17 +551,11 @@
               </label>
               <label>
                 Supplier
-                <div style="display: flex; gap: 6px; align-items: flex-start;">
-                  <div class="search-suggest-container" style="flex: 1 1 0; min-width: 0;">
-                    <input id="stockSupplierSearchInput" type="text" placeholder="🔍 Type supplier name to filter..." autocomplete="off" required />
-                    <input id="hiddenStockSupplierId" type="hidden" required />
-                    <div id="supplierSuggestionsBox" class="search-suggestions-box"></div>
-                  </div>
-                  <button type="button" id="quickAddSupplierBtn" title="Add new supplier" style="
-                    flex-shrink: 0; width: 42px; height: 42px; border-radius: 6px;
-                    background: var(--primary); color: #fff; border: none;
-                    font-size: 1.4rem; cursor: pointer; display: flex;
-                    align-items: center; justify-content: center; line-height: 1;">+</button>
+                <div class="supplier-search-container search-suggest-container">
+                  <input id="stockSupplierSearchInput" type="text" placeholder="🔍 Type supplier name..." autocomplete="off" required />
+                  <input id="hiddenStockSupplierId" type="hidden" required />
+                  <button type="button" id="quickAddSupplierBtn" class="supplier-quick-add-btn" title="Add new supplier">+</button>
+                  <div id="supplierSuggestionsBox" class="search-suggestions-box"></div>
                 </div>
               </label>
               <button id="stockSubmitBtn" class="primary full-row" type="submit">Save Stock Item</button>
@@ -712,17 +736,11 @@
           </label>
           <label>
             Supplier
-            <div style="display: flex; gap: 6px; align-items: flex-start;">
-              <div class="search-suggest-container" style="flex: 1 1 0; min-width: 0;">
-                <input id="editStockSupplierSearch" type="text" placeholder="🔍 Type supplier name to filter..." autocomplete="off" />
-                <input id="editStockHiddenSupplierId" type="hidden" />
-                <div id="editStockSupplierSuggestionsBox" class="search-suggestions-box"></div>
-              </div>
-              <button type="button" id="editStockQuickAddSupplierBtn" title="Add new supplier" style="
-                flex-shrink: 0; width: 42px; height: 42px; border-radius: 6px;
-                background: var(--primary); color: #fff; border: none;
-                font-size: 1.4rem; cursor: pointer; display: flex;
-                align-items: center; justify-content: center; line-height: 1;">+</button>
+            <div class="supplier-search-container search-suggest-container">
+              <input id="editStockSupplierSearch" type="text" placeholder="🔍 Type supplier name..." autocomplete="off" />
+              <input id="editStockHiddenSupplierId" type="hidden" />
+              <button type="button" id="editStockQuickAddSupplierBtn" class="supplier-quick-add-btn" title="Add new supplier">+</button>
+              <div id="editStockSupplierSuggestionsBox" class="search-suggestions-box"></div>
             </div>
           </label>
         </div>
