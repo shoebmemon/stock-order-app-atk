@@ -361,9 +361,9 @@
         width: 28px;
         height: 28px;
         border-radius: 50%;
-        background: var(--primary);
-        color: #fff;
-        border: none;
+        background: #fff;
+        color: var(--primary);
+        border: 1px solid var(--line);
         font-size: 1.2rem;
         line-height: 1;
         cursor: pointer;
@@ -371,9 +371,11 @@
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        box-shadow: 0 1px 3px rgba(13, 34, 39, 0.12);
       }
       .supplier-quick-add-btn:hover {
-        background: var(--primary-strong);
+        background: var(--soft);
+        border-color: var(--primary);
       }
 
       .qty-input-container {
