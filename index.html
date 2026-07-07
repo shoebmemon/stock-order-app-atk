@@ -355,27 +355,29 @@
       }
       .supplier-quick-add-btn {
         position: absolute;
-        right: 8px;
+        right: 10px;
         top: 50%;
         transform: translateY(-50%);
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        background: #fff;
-        color: var(--primary);
-        border: 1px solid var(--line);
-        font-size: 1.2rem;
+        width: auto;
+        height: auto;
+        border-radius: 0;
+        background: transparent;
+        color: var(--ink);
+        border: none;
+        font: inherit;
+        font-size: 1.3rem;
+        font-weight: 700;
         line-height: 1;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        box-shadow: 0 1px 3px rgba(13, 34, 39, 0.12);
+        box-shadow: none;
+        padding: 4px;
       }
       .supplier-quick-add-btn:hover {
-        background: var(--soft);
-        border-color: var(--primary);
+        color: var(--primary);
       }
 
       .qty-input-container {
