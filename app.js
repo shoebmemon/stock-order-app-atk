@@ -1389,6 +1389,7 @@ if (el.quickSupplierName) {
 // Wire the + buttons to the modal
 if (el.quickAddSupplierBtn) {
   el.quickAddSupplierBtn.addEventListener("click", () => {
+    if (el.supplierSuggestionsBox) el.supplierSuggestionsBox.style.display = "none";
     openQuickAddSupplierModal(
       document.querySelector("#stockSupplierSearchInput"),
       document.querySelector("#hiddenStockSupplierId")
@@ -1398,6 +1399,7 @@ if (el.quickAddSupplierBtn) {
 
 if (el.editStockQuickAddSupplierBtn) {
   el.editStockQuickAddSupplierBtn.addEventListener("click", () => {
+    if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
     openQuickAddSupplierModal(el.editStockSupplierSearch, el.editStockHiddenSupplierId);
   });
 }
