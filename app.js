@@ -320,8 +320,6 @@ const el = {
 
   pages: document.querySelectorAll(".page"),
   tabButtons: document.querySelectorAll(".tab-button"),
-  subTabButtons: document.querySelectorAll(".sub-tab-button"),
-  subPageViews: document.querySelectorAll(".sub-page-view"),
 
   exportCsvBtn: document.querySelector("#exportCsvBtn"),
   exportExcelBtn: document.querySelector("#exportExcelBtn"),
@@ -614,23 +612,13 @@ function showPage(pageId) {
     renderBifurcatedOrders();
   }
 
+  // Reset the supplier master/detail split view whenever navigating away from it
+  if (pageId !== "supplierPage") {
+    closeSupplierStockDetail();
+  }
+
   if (location.hash !== `#${pageId}`) {
     history.replaceState(null, "", `#${pageId}`);
-  }
-}
-
-function showSubPage(subPageId) {
-  el.subPageViews.forEach((view) => {
-    view.hidden = view.id !== subPageId;
-  });
-
-  el.subTabButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.subTarget === subPageId);
-  });
-
-  // When switching away from the supplier sub-page, reset detail view
-  if (subPageId !== "supplierSubPage") {
-    closeSupplierStockDetail();
   }
 }
 
@@ -2139,10 +2127,6 @@ if (el.masterBulkDeleteCancelBtn) {
   });
 }
 
-
-el.subTabButtons.forEach((btn) => {
-  btn.addEventListener("click", () => showSubPage(btn.dataset.subTarget));
-});
 
 if (el.searchSuggestionsBox) {
   el.searchSuggestionsBox.addEventListener("mousedown", (event) => {

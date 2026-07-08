@@ -10,37 +10,8 @@
     <title>Shop Stock Order App</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=21" />
+    <link rel="stylesheet" href="styles.css?v=22" />
     <style>
-      /* Sub-navigation tabs layout inside Add Data */
-      .sub-nav-tabs {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 16px;
-        max-width: 900px;
-        margin-left: auto;
-        margin-right: auto;
-      }
-      .sub-tab-button {
-        flex: 1;
-        min-height: 38px;
-        background: #eef3f4;
-        color: var(--muted);
-        font-size: 0.9rem;
-        font-weight: 700;
-        border: 0;
-        border-radius: 6px;
-        cursor: pointer;
-        -webkit-tap-highlight-color: transparent;
-      }
-      .sub-tab-button.active {
-        background: var(--primary);
-        color: #ffffff;
-      }
-      .sub-page-view[hidden] {
-        display: none;
-      }
-
       /* Login gate */
       .modal-overlay {
         position: fixed;
@@ -442,9 +413,51 @@
     </header>
 
     <nav class="page-tabs" aria-label="App pages">
-      <button class="tab-button active" type="button" data-page-target="orderPage">Order List</button>
-      <button class="tab-button" type="button" data-page-target="orderDetailsPage">Order Details</button>
-      <button class="tab-button" type="button" data-page-target="dataHubPage">Data</button>
+      <button class="tab-button active" type="button" data-page-target="orderPage">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <line x1="8" y1="6" x2="20" y2="6" />
+          <line x1="8" y1="12" x2="20" y2="12" />
+          <line x1="8" y1="18" x2="20" y2="18" />
+          <circle cx="4" cy="6" r="1.3" fill="currentColor" stroke="none" />
+          <circle cx="4" cy="12" r="1.3" fill="currentColor" stroke="none" />
+          <circle cx="4" cy="18" r="1.3" fill="currentColor" stroke="none" />
+        </svg>
+        <span>List</span>
+      </button>
+      <button class="tab-button" type="button" data-page-target="orderDetailsPage">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" />
+          <line x1="9" y1="8" x2="15" y2="8" />
+          <line x1="9" y1="12" x2="15" y2="12" />
+        </svg>
+        <span>Orders</span>
+      </button>
+      <button class="tab-button" type="button" data-page-target="stockPage">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 8l-9-5-9 5 9 5 9-5z" />
+          <path d="M3 8v8l9 5 9-5V8" />
+          <path d="M12 13v8" />
+        </svg>
+        <span>Stock</span>
+      </button>
+      <button class="tab-button" type="button" data-page-target="supplierPage">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="9" cy="8" r="3" />
+          <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+          <circle cx="17" cy="8" r="2.3" />
+          <path d="M15.5 14.2c2.6 .4 4.5 2.7 4.5 5.8" />
+        </svg>
+        <span>Suppliers</span>
+      </button>
+      <button class="tab-button" type="button" data-page-target="dataPage">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3v12" />
+          <path d="M4 11l4 4 4-4" />
+          <path d="M16 21V9" />
+          <path d="M20 13l-4-4-4 4" />
+        </svg>
+        <span>Data</span>
+      </button>
     </nav>
 
     <main class="app-shell">
@@ -531,122 +544,114 @@
         </div>
       </section>
 
-      <section id="dataHubPage" class="page" aria-labelledby="dataHubTitle" hidden>
-        <div class="sub-nav-tabs">
-          <button class="sub-tab-button active" type="button" data-sub-target="stockSubPage">Stock Details</button>
-          <button class="sub-tab-button" type="button" data-sub-target="supplierSubPage">Supplier Details</button>
-          <button class="sub-tab-button" type="button" data-sub-target="ioSubPage">Import/Export</button>
-        </div>
-
-        <div id="stockSubPage" class="sub-page-view">
-          <div class="panel inventory-panel">
-            <div class="section-heading">
-              <div>
-                <h2>Stock Details</h2>
-                <p>Your saved items. Use the + button on Order List to add new ones.</p>
-              </div>
-            </div>
-
-            <div class="toolbar">
-              <div class="search-suggest-container" style="flex: 1 1 260px;">
-                <input id="stockSearch" placeholder="🔍 Search stock items..." autocomplete="off" />
-                <div id="stockSearchSuggestionsBox" class="search-suggestions-box"></div>
-              </div>
-              <div class="search-suggest-container" style="flex: 1 1 200px;">
-                <input id="supplierFilter" type="text" placeholder="🔍 Filter by supplier..." autocomplete="off" aria-label="Filter by supplier" />
-                <div id="supplierFilterSuggestionsBox" class="search-suggestions-box"></div>
-              </div>
-            </div>
-
-            <div id="stockQuickOrderBar" class="stock-quick-order-bar" style="display: none">
-              <div class="stock-quick-order-info">
-                <strong id="stockQuickOrderItemName"></strong>
-                <span id="stockQuickOrderSupplierName" class="subtle"></span>
-              </div>
-              <div class="qty-input-container stock-quick-order-qty">
-                <input id="stockQuickOrderQty" type="number" min="1" step="1" value="1" inputmode="numeric" autocomplete="off" />
-                <span id="stockQuickOrderUnitLabel" class="qty-inline-unit-label"></span>
-              </div>
-              <button id="stockQuickOrderAddBtn" class="primary small-action" type="button">Add to Order</button>
-              <button id="stockQuickOrderCancelBtn" class="icon-btn" type="button" title="Cancel">✕</button>
-            </div>
-            <div id="stockQuickOrderAlert" style="display: none; margin-bottom: 12px"></div>
-
-            <div id="stockBulkDeleteBar" class="bulk-delete-bar" style="display: none;">
-              <span id="stockBulkDeleteCount" style="font-weight: 700; font-size: 0.9rem;">0 selected</span>
-              <div style="display: flex; gap: 8px;">
-                <button type="button" id="stockBulkDeleteCancelBtn" class="secondary small-action">Cancel</button>
-                <button type="button" id="stockBulkDeleteExecuteBtn" class="primary small-action" style="background: var(--danger);">Delete</button>
-              </div>
-            </div>
-
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Supplier</th>
-                    <th>Unit</th>
-                    <th style="text-align: right; padding-right: 20px">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="stockTable"></tbody>
-              </table>
+      <section id="stockPage" class="page" aria-labelledby="stockPageTitle" hidden>
+        <div class="panel inventory-panel">
+          <div class="section-heading">
+            <div>
+              <h2 id="stockPageTitle">Stock Details</h2>
+              <p>Your saved items. Use the + button on Order List to add new ones.</p>
             </div>
           </div>
-        </div>
 
-        <div id="supplierSubPage" class="sub-page-view" hidden>
-          <div class="panel supplier-panel">
-
-            <!-- Master view: supplier list -->
-            <div id="supplierMasterView">
-              <div class="section-heading">
-                <div>
-                  <h2>Supplier Details</h2>
-                  <p>Your saved suppliers. Use the + button on Order List to add new ones.</p>
-                </div>
-              </div>
-
-              <div class="search-suggest-container" style="margin: 14px 0 4px;">
-                <input id="supplierSearchInput" type="text" placeholder="🔍 Type to search suppliers..." autocomplete="off" />
-                <div id="supplierSearchSuggestionsBox" class="search-suggestions-box"></div>
-              </div>
-
-              <div id="supplierList" class="supplier-list"></div>
+          <div class="toolbar">
+            <div class="search-suggest-container" style="flex: 1 1 260px;">
+              <input id="stockSearch" placeholder="🔍 Search stock items..." autocomplete="off" />
+              <div id="stockSearchSuggestionsBox" class="search-suggestions-box"></div>
             </div>
-
-            <!-- Detail view: one supplier's stock items -->
-            <div id="supplierStockDetailView" style="display: none;">
-              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
-                <button id="supplierStockBackBtn" type="button" class="icon-btn" style="min-height: 36px; padding: 0 12px; font-size: 0.88rem;">← Back</button>
-                <div style="flex: 1 1 0; min-width: 0;">
-                  <h2 id="supplierStockDetailName" style="margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></h2>
-                  <p id="supplierStockDetailContact" class="subtle" style="margin: 0; font-size: 0.82rem;"></p>
-                </div>
-              </div>
-              <div id="supplierStockDetailHint" style="font-size: 0.82rem; color: var(--muted); margin-bottom: 10px;">Tap any item to add it to your order.</div>
-              <div id="supplierStockDetailList"></div>
+            <div class="search-suggest-container" style="flex: 1 1 200px;">
+              <input id="supplierFilter" type="text" placeholder="🔍 Filter by supplier..." autocomplete="off" aria-label="Filter by supplier" />
+              <div id="supplierFilterSuggestionsBox" class="search-suggestions-box"></div>
             </div>
+          </div>
 
+          <div id="stockQuickOrderBar" class="stock-quick-order-bar" style="display: none">
+            <div class="stock-quick-order-info">
+              <strong id="stockQuickOrderItemName"></strong>
+              <span id="stockQuickOrderSupplierName" class="subtle"></span>
+            </div>
+            <div class="qty-input-container stock-quick-order-qty">
+              <input id="stockQuickOrderQty" type="number" min="1" step="1" value="1" inputmode="numeric" autocomplete="off" />
+              <span id="stockQuickOrderUnitLabel" class="qty-inline-unit-label"></span>
+            </div>
+            <button id="stockQuickOrderAddBtn" class="primary small-action" type="button">Add to Order</button>
+            <button id="stockQuickOrderCancelBtn" class="icon-btn" type="button" title="Cancel">✕</button>
+          </div>
+          <div id="stockQuickOrderAlert" style="display: none; margin-bottom: 12px"></div>
+
+          <div id="stockBulkDeleteBar" class="bulk-delete-bar" style="display: none;">
+            <span id="stockBulkDeleteCount" style="font-weight: 700; font-size: 0.9rem;">0 selected</span>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" id="stockBulkDeleteCancelBtn" class="secondary small-action">Cancel</button>
+              <button type="button" id="stockBulkDeleteExecuteBtn" class="primary small-action" style="background: var(--danger);">Delete</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Supplier</th>
+                  <th>Unit</th>
+                  <th style="text-align: right; padding-right: 20px">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="stockTable"></tbody>
+            </table>
           </div>
         </div>
+      </section>
 
-        <div id="ioSubPage" class="sub-page-view" hidden>
-          <div class="panel data-panel">
+      <section id="supplierPage" class="page" aria-labelledby="supplierPageTitle" hidden>
+        <div class="panel supplier-panel">
+
+          <!-- Master view: supplier list -->
+          <div id="supplierMasterView">
             <div class="section-heading">
               <div>
-                <h2>Import / Export</h2>
-                <p>Use these only when backing up or moving data.</p>
+                <h2 id="supplierPageTitle">Supplier Details</h2>
+                <p>Your saved suppliers. Use the + button on Order List to add new ones.</p>
               </div>
             </div>
-            <div class="data-actions">
-              <button class="secondary small-action" id="exportCsvBtn" type="button">Export CSV</button>
-              <button class="secondary small-action" id="exportExcelBtn" type="button">Export Excel</button>
-              <button class="secondary small-action" id="exportDataBtn" type="button">Backup JSON</button>
-              <label class="secondary file-label small-action" for="importDataInput">Import File</label>
-              <input id="importDataInput" type="file" accept=".json,.csv,.xls,text/csv,application/json,application/vnd.ms-excel" />
+
+            <div class="search-suggest-container" style="margin: 14px 0 4px;">
+              <input id="supplierSearchInput" type="text" placeholder="🔍 Type to search suppliers..." autocomplete="off" />
+              <div id="supplierSearchSuggestionsBox" class="search-suggestions-box"></div>
             </div>
+
+            <div id="supplierList" class="supplier-list"></div>
+          </div>
+
+          <!-- Detail view: one supplier's stock items -->
+          <div id="supplierStockDetailView" style="display: none;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+              <button id="supplierStockBackBtn" type="button" class="icon-btn" style="min-height: 36px; padding: 0 12px; font-size: 0.88rem;">← Back</button>
+              <div style="flex: 1 1 0; min-width: 0;">
+                <h2 id="supplierStockDetailName" style="margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></h2>
+                <p id="supplierStockDetailContact" class="subtle" style="margin: 0; font-size: 0.82rem;"></p>
+              </div>
+            </div>
+            <div id="supplierStockDetailHint" style="font-size: 0.82rem; color: var(--muted); margin-bottom: 10px;">Tap any item to add it to your order.</div>
+            <div id="supplierStockDetailList"></div>
+          </div>
+
+        </div>
+      </section>
+
+      <section id="dataPage" class="page" aria-labelledby="dataPageTitle" hidden>
+        <div class="panel data-panel">
+          <div class="section-heading">
+            <div>
+              <h2 id="dataPageTitle">Import / Export</h2>
+              <p>Use these only when backing up or moving data.</p>
+            </div>
+          </div>
+          <div class="data-actions">
+            <button class="secondary small-action" id="exportCsvBtn" type="button">Export CSV</button>
+            <button class="secondary small-action" id="exportExcelBtn" type="button">Export Excel</button>
+            <button class="secondary small-action" id="exportDataBtn" type="button">Backup JSON</button>
+            <label class="secondary file-label small-action" for="importDataInput">Import File</label>
+            <input id="importDataInput" type="file" accept=".json,.csv,.xls,text/csv,application/json,application/vnd.ms-excel" />
           </div>
         </div>
       </section>
@@ -823,6 +828,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=53"></script>
+    <script src="app.js?v=54"></script>
   </body>
 </html>
