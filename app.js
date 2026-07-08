@@ -395,8 +395,6 @@ const el = {
   quickStockItemNewSupplierName: document.querySelector("#quickStockItemNewSupplierName"),
   quickStockItemNewSupplierEmail: document.querySelector("#quickStockItemNewSupplierEmail"),
   quickStockItemNewSupplierPhone: document.querySelector("#quickStockItemNewSupplierPhone"),
-  quickStockItemNewSupplierCancelBtn: document.querySelector("#quickStockItemNewSupplierCancelBtn"),
-  quickStockItemNewSupplierUseBtn: document.querySelector("#quickStockItemNewSupplierUseBtn"),
   quickAddStockItemCancelBtn: document.querySelector("#quickAddStockItemCancelBtn"),
   quickAddStockItemSaveBtn: document.querySelector("#quickAddStockItemSaveBtn"),
 
@@ -1435,19 +1433,17 @@ if (el.editStockQuickAddSupplierBtn) {
 // After saving, the new item is added to Stock Details and auto-selected in whichever
 // search field triggered the modal (so it can be added to the order right away).
 //
-// If the supplier isn't in the list yet, the + button next to the supplier field expands
-// an inline "New Supplier Details" panel in this same popup (no second modal). The new
-// supplier isn't actually created until "Add Item" is pressed — both are saved together,
-// so nothing gets left behind if the user cancels partway through.
+// If the supplier isn't in the list yet, the + button next to the supplier field reveals
+// a plain inline "New Supplier Name / Email / Phone" panel — no second modal, no separate
+// confirm step. Whatever is typed there is saved together with the item in a single click
+// of "Add Item".
 
 let _quickAddStockItemCallerSearchInput = null;
 let _quickAddStockItemCallerHiddenInput = null;
-let _pendingNewSupplier = null; // { name, email, phone } — staged until "Add Item" is pressed
 
 function openQuickAddStockItemModal(searchInput, hiddenInput) {
   _quickAddStockItemCallerSearchInput = searchInput;
   _quickAddStockItemCallerHiddenInput = hiddenInput;
-  _pendingNewSupplier = null;
 
   // Close any open suggestion dropdowns so they don't render on top of this modal
   if (el.searchSuggestionsBox) el.searchSuggestionsBox.style.display = "none";
@@ -1473,14 +1469,19 @@ function closeQuickAddStockItemModal() {
   if (el.quickAddStockItemModal) el.quickAddStockItemModal.style.display = "none";
   _quickAddStockItemCallerSearchInput = null;
   _quickAddStockItemCallerHiddenInput = null;
-  _pendingNewSupplier = null;
   closeInlineNewSupplierPanel();
 }
 
-// ---- Inline "New Supplier Details" panel (Option A) ----
+// ---- Inline "New Supplier" panel — plain fields, no buttons of its own ----
+
+function isInlineNewSupplierPanelOpen() {
+  return !!(el.quickStockItemNewSupplierPanel && el.quickStockItemNewSupplierPanel.style.display !== "none");
+}
 
 function openInlineNewSupplierPanel() {
   if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
+  // Switching to "add new" mode — clear any existing-supplier selection
+  if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
   const prefill = el.quickStockItemSupplierSearch?.value.trim() || "";
   if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.value = prefill;
   if (el.quickStockItemNewSupplierEmail) el.quickStockItemNewSupplierEmail.value = "";
@@ -1491,46 +1492,19 @@ function openInlineNewSupplierPanel() {
 
 function closeInlineNewSupplierPanel() {
   if (el.quickStockItemNewSupplierPanel) el.quickStockItemNewSupplierPanel.style.display = "none";
+  if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.value = "";
+  if (el.quickStockItemNewSupplierEmail) el.quickStockItemNewSupplierEmail.value = "";
+  if (el.quickStockItemNewSupplierPhone) el.quickStockItemNewSupplierPhone.value = "";
 }
 
-function useInlineNewSupplier() {
-  const name = el.quickStockItemNewSupplierName?.value.trim();
-  const email = el.quickStockItemNewSupplierEmail?.value.trim() || "";
-  const phone = (el.quickStockItemNewSupplierPhone?.value.trim() || "").replace(/[^0-9+]/g, "");
-
-  if (!name) {
-    showConfirm("Missing Name", "Please enter a supplier name.", "OK", false);
-    return;
-  }
-
-  // If a supplier with this name already exists, just select it instead of staging a duplicate
-  const duplicate = state.suppliers.find(
-    s => s.name.trim().toLowerCase() === name.toLowerCase()
-  );
-  if (duplicate) {
-    if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = duplicate.name;
-    if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = duplicate.id;
-    _pendingNewSupplier = null;
-    closeInlineNewSupplierPanel();
-    return;
-  }
-
-  // Stage the new supplier — it's created together with the stock item on "Add Item"
-  _pendingNewSupplier = { name, email, phone };
-  if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = name;
-  if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
-  closeInlineNewSupplierPanel();
-}
-
-if (el.quickStockItemNewSupplierUseBtn) el.quickStockItemNewSupplierUseBtn.addEventListener("click", useInlineNewSupplier);
-if (el.quickStockItemNewSupplierCancelBtn) {
-  el.quickStockItemNewSupplierCancelBtn.addEventListener("click", () => {
-    closeInlineNewSupplierPanel();
-  });
-}
-if (el.quickStockItemNewSupplierName) {
-  el.quickStockItemNewSupplierName.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); useInlineNewSupplier(); }
+// + button toggles the inline panel open/closed — no separate confirm/cancel buttons
+if (el.quickStockItemQuickAddSupplierBtn) {
+  el.quickStockItemQuickAddSupplierBtn.addEventListener("click", () => {
+    if (isInlineNewSupplierPanelOpen()) {
+      closeInlineNewSupplierPanel();
+    } else {
+      openInlineNewSupplierPanel();
+    }
   });
 }
 
@@ -1549,8 +1523,16 @@ function saveQuickAddStockItemModal() {
     return;
   }
 
-  if (!supplierId && !_pendingNewSupplier) {
-    showConfirm("Missing Supplier", "Please select a supplier from the autocomplete suggestions list, or use the + button to add a new one.", "OK", false);
+  // Read the inline new-supplier fields directly — no separate confirm step
+  let newSupplierName = "", newSupplierEmail = "", newSupplierPhone = "";
+  if (!supplierId && isInlineNewSupplierPanelOpen()) {
+    newSupplierName = el.quickStockItemNewSupplierName?.value.trim() || "";
+    newSupplierEmail = el.quickStockItemNewSupplierEmail?.value.trim() || "";
+    newSupplierPhone = (el.quickStockItemNewSupplierPhone?.value.trim() || "").replace(/[^0-9+]/g, "");
+  }
+
+  if (!supplierId && !newSupplierName) {
+    showConfirm("Missing Supplier", "Please select a supplier from the autocomplete suggestions list, or tap + and enter a new supplier name.", "OK", false);
     return;
   }
 
@@ -1566,14 +1548,21 @@ function saveQuickAddStockItemModal() {
     return;
   }
 
-  // Create the staged supplier now, atomically with the stock item, if one is pending
-  if (!supplierId && _pendingNewSupplier) {
-    const newSupplier = { id: generateUUID(), name: _pendingNewSupplier.name, email: _pendingNewSupplier.email, phone: _pendingNewSupplier.phone };
-    state.suppliers.push(newSupplier);
-    syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] });
-    renderSupplierOptions();
-    renderSupplierList();
-    supplierId = newSupplier.id;
+  // Create the new supplier now, atomically with the stock item, in this one click
+  if (!supplierId && newSupplierName) {
+    const existingSupplier = state.suppliers.find(
+      s => s.name.trim().toLowerCase() === newSupplierName.toLowerCase()
+    );
+    if (existingSupplier) {
+      supplierId = existingSupplier.id;
+    } else {
+      const newSupplier = { id: generateUUID(), name: newSupplierName, email: newSupplierEmail, phone: newSupplierPhone };
+      state.suppliers.push(newSupplier);
+      syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] });
+      renderSupplierOptions();
+      renderSupplierList();
+      supplierId = newSupplier.id;
+    }
   }
 
   const newStock = { id: generateUUID(), name, supplierId, unit };
@@ -1606,6 +1595,21 @@ if (el.quickStockItemUnit) {
     if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
   });
 }
+if (el.quickStockItemNewSupplierName) {
+  el.quickStockItemNewSupplierName.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
+  });
+}
+if (el.quickStockItemNewSupplierEmail) {
+  el.quickStockItemNewSupplierEmail.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
+  });
+}
+if (el.quickStockItemNewSupplierPhone) {
+  el.quickStockItemNewSupplierPhone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
+  });
+}
 
 // Supplier autocomplete inside the quick add stock item modal
 if (el.quickStockItemSupplierSearch) {
@@ -1631,7 +1635,8 @@ if (el.quickStockItemSupplierSearch) {
   };
 
   el.quickStockItemSupplierSearch.addEventListener("input", () => {
-    _pendingNewSupplier = null; // typing again invalidates any staged (not-yet-created) supplier
+    // Typing to search again means "not adding new" — collapse the inline panel
+    closeInlineNewSupplierPanel();
     if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
     showQuickStockItemSuppliers();
   });
@@ -1645,16 +1650,8 @@ if (el.quickStockItemSupplierSuggestionsBox) {
     e.preventDefault();
     if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = item.dataset.name;
     if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = item.dataset.id;
-    _pendingNewSupplier = null;
+    closeInlineNewSupplierPanel();
     el.quickStockItemSupplierSuggestionsBox.style.display = "none";
-  });
-}
-
-// + button inside this modal — expands the inline "New Supplier Details" panel
-// right here in the same popup, instead of opening a second modal.
-if (el.quickStockItemQuickAddSupplierBtn) {
-  el.quickStockItemQuickAddSupplierBtn.addEventListener("click", () => {
-    openInlineNewSupplierPanel();
   });
 }
 
