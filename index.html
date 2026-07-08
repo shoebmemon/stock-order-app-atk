@@ -671,7 +671,7 @@
         <p class="subtle" style="margin: 0 0 16px; font-size: 0.85rem;">Email and phone are optional.</p>
         <div class="compact-form">
           <label>
-            Supplier Name<span style="color: var(--danger);">*</span>
+            <span>Supplier Name<span style="color: var(--danger);">*</span></span>
             <input type="text" id="quickSupplierName" autocomplete="off" placeholder="e.g. Sunrise Traders" />
           </label>
           <label>
@@ -697,15 +697,15 @@
         <p class="subtle" style="margin: 0 0 16px; font-size: 0.85rem;">This item will also be added to your Stock Details list.</p>
         <div class="compact-form">
           <label>
-            Item Name<span style="color: var(--danger);">*</span>
+            <span>Item Name<span style="color: var(--danger);">*</span></span>
             <input type="text" id="quickStockItemName" autocomplete="off" placeholder="e.g. Basmati Rice 5kg" />
           </label>
           <label>
-            Unit<span style="color: var(--danger);">*</span>
+            <span>Unit<span style="color: var(--danger);">*</span></span>
             <input type="text" id="quickStockItemUnit" autocomplete="off" placeholder="pcs, packs, bags, kg" />
           </label>
           <label>
-            Supplier<span style="color: var(--danger);">*</span>
+            <span>Supplier<span style="color: var(--danger);">*</span></span>
             <div class="supplier-search-container search-suggest-container">
               <input id="quickStockItemSupplierSearch" type="text" placeholder="🔍 Type supplier name..." autocomplete="off" />
               <input id="quickStockItemHiddenSupplierId" type="hidden" />
@@ -717,7 +717,7 @@
           <div id="quickStockItemNewSupplierPanel" style="display: none; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--soft); margin-top: -4px;">
             <div class="compact-form">
               <label>
-                New Supplier Name<span style="color: var(--danger);">*</span>
+                <span>New Supplier Name<span style="color: var(--danger);">*</span></span>
                 <input type="text" id="quickStockItemNewSupplierName" autocomplete="off" placeholder="e.g. Sunrise Traders" />
               </label>
               <label>
@@ -821,6 +821,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=51"></script>
+    <script src="app.js?v=52"></script>
   </body>
 </html>
