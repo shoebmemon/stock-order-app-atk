@@ -1322,6 +1322,13 @@ function openQuickAddSupplierModal(searchInput, hiddenInput) {
   _quickAddSupplierCallerSearchInput = searchInput;
   _quickAddSupplierCallerHiddenInput = hiddenInput;
 
+  // Close any open supplier suggestion dropdowns so they don't render on top of this modal
+  if (el.supplierSuggestionsBox) el.supplierSuggestionsBox.style.display = "none";
+  if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
+  if (el.stockSearchSuggestionsBox) el.stockSearchSuggestionsBox.style.display = "none";
+  if (el.supplierSearchSuggestionsBox) el.supplierSearchSuggestionsBox.style.display = "none";
+  if (el.supplierFilterSuggestionsBox) el.supplierFilterSuggestionsBox.style.display = "none";
+
   // Pre-fill the name with whatever the user already typed in the search box
   const prefill = searchInput?.value.trim() || "";
   if (el.quickSupplierName) el.quickSupplierName.value = prefill;
