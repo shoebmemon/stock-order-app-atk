@@ -784,7 +784,7 @@ function renderSupplierStockDetail() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (!items.length) {
-    el.supplierStockDetailList.innerHTML = `<div class="empty">No stock items linked to this supplier yet.<br>Go to Stock Details to add some.</div>`;
+    el.supplierStockDetailList.innerHTML = `<div class="empty">No stock items linked to this supplier yet.<br>Go to Order List and tap the + button to add some.</div>`;
     return;
   }
 
@@ -812,7 +812,7 @@ function closeSupplierStockDetail() {
 function renderSupplierList() {
   if (!el.supplierList) return;
   if (!state.suppliers.length) {
-    el.supplierList.innerHTML = `<div class="empty">Add your first supplier above.</div>`;
+    el.supplierList.innerHTML = `<div class="empty">No suppliers yet. Go to Order List and tap the + button to add one.</div>`;
     return;
   }
 
@@ -864,7 +864,7 @@ function handleSearchInput() {
   ).sort((a, b) => a.name.localeCompare(b.name));
 
   if (!state.stocks.length) {
-    el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No stock items added yet. Go to Stock Details to add some.</div>`;
+    el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No stock items added yet. Tap the + button to add one.</div>`;
     el.searchSuggestionsBox.style.display = "block";
     return;
   }

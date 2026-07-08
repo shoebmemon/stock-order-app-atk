@@ -442,7 +442,7 @@
     <nav class="page-tabs" aria-label="App pages">
       <button class="tab-button active" type="button" data-page-target="orderPage">Order List</button>
       <button class="tab-button" type="button" data-page-target="orderDetailsPage">Order Details</button>
-      <button class="tab-button" type="button" data-page-target="dataHubPage">Add Data</button>
+      <button class="tab-button" type="button" data-page-target="dataHubPage">Data</button>
     </nav>
 
     <main class="app-shell">
@@ -533,7 +533,7 @@
         <div class="sub-nav-tabs">
           <button class="sub-tab-button active" type="button" data-sub-target="stockSubPage">Stock Details</button>
           <button class="sub-tab-button" type="button" data-sub-target="supplierSubPage">Supplier Details</button>
-          <button class="sub-tab-button" type="button" data-sub-target="ioSubPage">Data</button>
+          <button class="sub-tab-button" type="button" data-sub-target="ioSubPage">Import/Export</button>
         </div>
 
         <div id="stockSubPage" class="sub-page-view">
@@ -541,30 +541,9 @@
             <div class="section-heading">
               <div>
                 <h2>Stock Details</h2>
-                <p>Add items once, then pick them later when you need to order.</p>
+                <p>Your saved items. Use the + button on Order List to add new ones.</p>
               </div>
             </div>
-
-            <form id="stockForm" class="form-grid" autocomplete="off">
-              <label>
-                Item name
-                <input id="itemName" autocomplete="off" required placeholder="e.g. Basmati Rice 5kg" />
-              </label>
-              <label>
-                Unit
-                <input id="itemUnit" placeholder="pcs, packs, bags, kg" autocomplete="off" required />
-              </label>
-              <label>
-                Supplier
-                <div class="supplier-search-container search-suggest-container">
-                  <input id="stockSupplierSearchInput" type="text" placeholder="🔍 Type supplier name..." autocomplete="off" required />
-                  <input id="hiddenStockSupplierId" type="hidden" required />
-                  <button type="button" id="quickAddSupplierBtn" class="supplier-quick-add-btn" title="Add new supplier">+</button>
-                  <div id="supplierSuggestionsBox" class="search-suggestions-box"></div>
-                </div>
-              </label>
-              <button id="stockSubmitBtn" class="primary full-row" type="submit">Save Stock Item</button>
-            </form>
 
             <div class="toolbar">
               <div class="search-suggest-container" style="flex: 1 1 260px;">
@@ -623,24 +602,9 @@
               <div class="section-heading">
                 <div>
                   <h2>Supplier Details</h2>
-                  <p>Keep supplier email and phone details here.</p>
+                  <p>Your saved suppliers. Use the + button on Order List to add new ones.</p>
                 </div>
               </div>
-              <form id="supplierForm" class="form-grid supplier-form" autocomplete="off">
-                <label>
-                  Supplier name
-                  <input id="supplierName" autocomplete="off" required placeholder="e.g. Sunrise Traders" />
-                </label>
-                <label>
-                  Email
-                  <input id="supplierEmail" type="email" placeholder="orders@example.com" autocomplete="off" />
-                </label>
-                <label>
-                  Phone
-                  <input id="supplierPhone" placeholder="e.g. 9876543210" autocomplete="off" />
-                </label>
-                <button class="primary full-row" type="submit">Add Supplier</button>
-              </form>
 
               <div class="search-suggest-container" style="margin: 14px 0 4px;">
                 <input id="supplierSearchInput" type="text" placeholder="🔍 Type to search suppliers..." autocomplete="off" />
@@ -862,6 +826,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=49"></script>
+    <script src="app.js?v=50"></script>
   </body>
 </html>
