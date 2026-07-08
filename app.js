@@ -391,6 +391,12 @@ const el = {
   quickStockItemHiddenSupplierId: document.querySelector("#quickStockItemHiddenSupplierId"),
   quickStockItemSupplierSuggestionsBox: document.querySelector("#quickStockItemSupplierSuggestionsBox"),
   quickStockItemQuickAddSupplierBtn: document.querySelector("#quickStockItemQuickAddSupplierBtn"),
+  quickStockItemNewSupplierPanel: document.querySelector("#quickStockItemNewSupplierPanel"),
+  quickStockItemNewSupplierName: document.querySelector("#quickStockItemNewSupplierName"),
+  quickStockItemNewSupplierEmail: document.querySelector("#quickStockItemNewSupplierEmail"),
+  quickStockItemNewSupplierPhone: document.querySelector("#quickStockItemNewSupplierPhone"),
+  quickStockItemNewSupplierCancelBtn: document.querySelector("#quickStockItemNewSupplierCancelBtn"),
+  quickStockItemNewSupplierUseBtn: document.querySelector("#quickStockItemNewSupplierUseBtn"),
   quickAddStockItemCancelBtn: document.querySelector("#quickAddStockItemCancelBtn"),
   quickAddStockItemSaveBtn: document.querySelector("#quickAddStockItemSaveBtn"),
 
@@ -1428,13 +1434,20 @@ if (el.editStockQuickAddSupplierBtn) {
 // Opened from the + button next to "Search & Select Stock Item" on the Order List page.
 // After saving, the new item is added to Stock Details and auto-selected in whichever
 // search field triggered the modal (so it can be added to the order right away).
+//
+// If the supplier isn't in the list yet, the + button next to the supplier field expands
+// an inline "New Supplier Details" panel in this same popup (no second modal). The new
+// supplier isn't actually created until "Add Item" is pressed — both are saved together,
+// so nothing gets left behind if the user cancels partway through.
 
 let _quickAddStockItemCallerSearchInput = null;
 let _quickAddStockItemCallerHiddenInput = null;
+let _pendingNewSupplier = null; // { name, email, phone } — staged until "Add Item" is pressed
 
 function openQuickAddStockItemModal(searchInput, hiddenInput) {
   _quickAddStockItemCallerSearchInput = searchInput;
   _quickAddStockItemCallerHiddenInput = hiddenInput;
+  _pendingNewSupplier = null;
 
   // Close any open suggestion dropdowns so they don't render on top of this modal
   if (el.searchSuggestionsBox) el.searchSuggestionsBox.style.display = "none";
@@ -1451,6 +1464,7 @@ function openQuickAddStockItemModal(searchInput, hiddenInput) {
   if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = "";
   if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
   if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
+  closeInlineNewSupplierPanel();
   if (el.quickAddStockItemModal) el.quickAddStockItemModal.style.display = "flex";
   setTimeout(() => { if (el.quickStockItemName) el.quickStockItemName.focus(); }, 50);
 }
@@ -1459,12 +1473,71 @@ function closeQuickAddStockItemModal() {
   if (el.quickAddStockItemModal) el.quickAddStockItemModal.style.display = "none";
   _quickAddStockItemCallerSearchInput = null;
   _quickAddStockItemCallerHiddenInput = null;
+  _pendingNewSupplier = null;
+  closeInlineNewSupplierPanel();
+}
+
+// ---- Inline "New Supplier Details" panel (Option A) ----
+
+function openInlineNewSupplierPanel() {
+  if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
+  const prefill = el.quickStockItemSupplierSearch?.value.trim() || "";
+  if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.value = prefill;
+  if (el.quickStockItemNewSupplierEmail) el.quickStockItemNewSupplierEmail.value = "";
+  if (el.quickStockItemNewSupplierPhone) el.quickStockItemNewSupplierPhone.value = "";
+  if (el.quickStockItemNewSupplierPanel) el.quickStockItemNewSupplierPanel.style.display = "block";
+  setTimeout(() => { if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.focus(); }, 50);
+}
+
+function closeInlineNewSupplierPanel() {
+  if (el.quickStockItemNewSupplierPanel) el.quickStockItemNewSupplierPanel.style.display = "none";
+}
+
+function useInlineNewSupplier() {
+  const name = el.quickStockItemNewSupplierName?.value.trim();
+  const email = el.quickStockItemNewSupplierEmail?.value.trim() || "";
+  const phone = (el.quickStockItemNewSupplierPhone?.value.trim() || "").replace(/[^0-9+]/g, "");
+
+  if (!name) {
+    showConfirm("Missing Name", "Please enter a supplier name.", "OK", false);
+    return;
+  }
+
+  // If a supplier with this name already exists, just select it instead of staging a duplicate
+  const duplicate = state.suppliers.find(
+    s => s.name.trim().toLowerCase() === name.toLowerCase()
+  );
+  if (duplicate) {
+    if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = duplicate.name;
+    if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = duplicate.id;
+    _pendingNewSupplier = null;
+    closeInlineNewSupplierPanel();
+    return;
+  }
+
+  // Stage the new supplier — it's created together with the stock item on "Add Item"
+  _pendingNewSupplier = { name, email, phone };
+  if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = name;
+  if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
+  closeInlineNewSupplierPanel();
+}
+
+if (el.quickStockItemNewSupplierUseBtn) el.quickStockItemNewSupplierUseBtn.addEventListener("click", useInlineNewSupplier);
+if (el.quickStockItemNewSupplierCancelBtn) {
+  el.quickStockItemNewSupplierCancelBtn.addEventListener("click", () => {
+    closeInlineNewSupplierPanel();
+  });
+}
+if (el.quickStockItemNewSupplierName) {
+  el.quickStockItemNewSupplierName.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); useInlineNewSupplier(); }
+  });
 }
 
 function saveQuickAddStockItemModal() {
   const name = el.quickStockItemName?.value.trim();
   const unit = formatUnit(el.quickStockItemUnit?.value || "");
-  const supplierId = el.quickStockItemHiddenSupplierId?.value || "";
+  let supplierId = el.quickStockItemHiddenSupplierId?.value || "";
 
   if (!name) {
     showConfirm("Missing Name", "Please enter an item name.", "OK", false);
@@ -1476,12 +1549,12 @@ function saveQuickAddStockItemModal() {
     return;
   }
 
-  if (!supplierId || el.quickStockItemSupplierSearch.value.trim() === "") {
-    showConfirm("Missing Supplier", "Please select a supplier from the autocomplete suggestions list. Use the + button if the supplier is not in the list yet.", "OK", false);
+  if (!supplierId && !_pendingNewSupplier) {
+    showConfirm("Missing Supplier", "Please select a supplier from the autocomplete suggestions list, or use the + button to add a new one.", "OK", false);
     return;
   }
 
-  // Duplicate check — same name (case-insensitive) already exists
+  // Duplicate check — same item name (case-insensitive) already exists
   const duplicate = state.stocks.find(
     s => s.name.trim().toLowerCase() === name.toLowerCase()
   );
@@ -1491,6 +1564,16 @@ function saveQuickAddStockItemModal() {
     if (_quickAddStockItemCallerHiddenInput) _quickAddStockItemCallerHiddenInput.value = duplicate.id;
     closeQuickAddStockItemModal();
     return;
+  }
+
+  // Create the staged supplier now, atomically with the stock item, if one is pending
+  if (!supplierId && _pendingNewSupplier) {
+    const newSupplier = { id: generateUUID(), name: _pendingNewSupplier.name, email: _pendingNewSupplier.email, phone: _pendingNewSupplier.phone };
+    state.suppliers.push(newSupplier);
+    syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] });
+    renderSupplierOptions();
+    renderSupplierList();
+    supplierId = newSupplier.id;
   }
 
   const newStock = { id: generateUUID(), name, supplierId, unit };
@@ -1547,7 +1630,11 @@ if (el.quickStockItemSupplierSearch) {
     el.quickStockItemSupplierSuggestionsBox.style.display = "block";
   };
 
-  el.quickStockItemSupplierSearch.addEventListener("input", showQuickStockItemSuppliers);
+  el.quickStockItemSupplierSearch.addEventListener("input", () => {
+    _pendingNewSupplier = null; // typing again invalidates any staged (not-yet-created) supplier
+    if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
+    showQuickStockItemSuppliers();
+  });
   el.quickStockItemSupplierSearch.addEventListener("focus", showQuickStockItemSuppliers);
 }
 
@@ -1558,15 +1645,16 @@ if (el.quickStockItemSupplierSuggestionsBox) {
     e.preventDefault();
     if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = item.dataset.name;
     if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = item.dataset.id;
+    _pendingNewSupplier = null;
     el.quickStockItemSupplierSuggestionsBox.style.display = "none";
   });
 }
 
-// + button inside this modal — for when the supplier isn't in the list yet
+// + button inside this modal — expands the inline "New Supplier Details" panel
+// right here in the same popup, instead of opening a second modal.
 if (el.quickStockItemQuickAddSupplierBtn) {
   el.quickStockItemQuickAddSupplierBtn.addEventListener("click", () => {
-    if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
-    openQuickAddSupplierModal(el.quickStockItemSupplierSearch, el.quickStockItemHiddenSupplierId);
+    openInlineNewSupplierPanel();
   });
 }
 

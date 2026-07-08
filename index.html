@@ -749,6 +749,28 @@
               <div id="quickStockItemSupplierSuggestionsBox" class="search-suggestions-box"></div>
             </div>
           </label>
+
+          <div id="quickStockItemNewSupplierPanel" style="display: none; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--soft); margin-top: -4px;">
+            <p style="margin: 0 0 10px; font-size: 0.82rem; font-weight: 800; color: var(--ink);">New Supplier Details</p>
+            <div class="compact-form">
+              <label>
+                Supplier Name <span style="color: var(--danger);">*</span>
+                <input type="text" id="quickStockItemNewSupplierName" autocomplete="off" placeholder="e.g. Sunrise Traders" />
+              </label>
+              <label>
+                Email
+                <input type="email" id="quickStockItemNewSupplierEmail" autocomplete="off" placeholder="orders@example.com" />
+              </label>
+              <label>
+                Phone
+                <input type="text" id="quickStockItemNewSupplierPhone" autocomplete="off" placeholder="e.g. 9876543210" />
+              </label>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 12px;">
+              <button type="button" class="secondary small-action" id="quickStockItemNewSupplierCancelBtn" style="flex: 1;">Cancel</button>
+              <button type="button" class="primary small-action" id="quickStockItemNewSupplierUseBtn" style="flex: 1;">Use This Supplier</button>
+            </div>
+          </div>
         </div>
         <div style="display: flex; gap: 10px; margin-top: 18px;">
           <button type="button" class="secondary" id="quickAddStockItemCancelBtn" style="flex: 1;">Cancel</button>
@@ -840,6 +862,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=48"></script>
+    <script src="app.js?v=49"></script>
   </body>
 </html>
