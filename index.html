@@ -458,9 +458,10 @@
           <form id="orderForm" class="compact-form" autocomplete="off">
             <label>
               Search & Select Stock Item
-              <div class="search-suggest-container">
+              <div class="supplier-search-container search-suggest-container">
                 <input id="orderItemSearchInput" type="text" placeholder="🔍 Type item name to filter..." autocomplete="off" required />
                 <input id="hiddenOrderItemId" type="hidden" required />
+                <button type="button" id="quickAddStockItemBtn" class="supplier-quick-add-btn" title="Add new stock item">+</button>
                 <div id="searchSuggestionsBox" class="search-suggestions-box"></div>
               </div>
             </label>
@@ -725,6 +726,37 @@
       </div>
     </div>
 
+    <!-- Quick Add Stock Item Modal — opened from + button in "Search & Select Stock Item" on Order List page -->
+    <div id="quickAddStockItemModal" class="modal-overlay" style="display: none;">
+      <div class="modal-card" style="max-width: 380px;">
+        <h2 style="margin: 0 0 4px; font-size: 1.1rem;">Add New Stock Item</h2>
+        <p class="subtle" style="margin: 0 0 16px; font-size: 0.85rem;">This item will also be added to your Stock Details list.</p>
+        <div class="compact-form">
+          <label>
+            Item Name <span style="color: var(--danger);">*</span>
+            <input type="text" id="quickStockItemName" autocomplete="off" placeholder="e.g. Basmati Rice 5kg" />
+          </label>
+          <label>
+            Unit <span style="color: var(--danger);">*</span>
+            <input type="text" id="quickStockItemUnit" autocomplete="off" placeholder="pcs, packs, bags, kg" />
+          </label>
+          <label>
+            Supplier <span style="color: var(--danger);">*</span>
+            <div class="supplier-search-container search-suggest-container">
+              <input id="quickStockItemSupplierSearch" type="text" placeholder="🔍 Type supplier name..." autocomplete="off" />
+              <input id="quickStockItemHiddenSupplierId" type="hidden" />
+              <button type="button" id="quickStockItemQuickAddSupplierBtn" class="supplier-quick-add-btn" title="Add new supplier">+</button>
+              <div id="quickStockItemSupplierSuggestionsBox" class="search-suggestions-box"></div>
+            </div>
+          </label>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 18px;">
+          <button type="button" class="secondary" id="quickAddStockItemCancelBtn" style="flex: 1;">Cancel</button>
+          <button type="button" class="primary" id="quickAddStockItemSaveBtn" style="flex: 1;">Add Item</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Edit Stock Modal -->
     <div id="editStockModal" class="modal-overlay" style="display: none">
       <div class="modal-card" style="max-width: 420px;">
@@ -808,6 +840,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=47"></script>
+    <script src="app.js?v=48"></script>
   </body>
 </html>

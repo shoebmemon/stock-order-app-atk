@@ -383,6 +383,17 @@ const el = {
   quickAddSupplierCancelBtn: document.querySelector("#quickAddSupplierCancelBtn"),
   quickAddSupplierSaveBtn: document.querySelector("#quickAddSupplierSaveBtn"),
 
+  quickAddStockItemBtn: document.querySelector("#quickAddStockItemBtn"),
+  quickAddStockItemModal: document.querySelector("#quickAddStockItemModal"),
+  quickStockItemName: document.querySelector("#quickStockItemName"),
+  quickStockItemUnit: document.querySelector("#quickStockItemUnit"),
+  quickStockItemSupplierSearch: document.querySelector("#quickStockItemSupplierSearch"),
+  quickStockItemHiddenSupplierId: document.querySelector("#quickStockItemHiddenSupplierId"),
+  quickStockItemSupplierSuggestionsBox: document.querySelector("#quickStockItemSupplierSuggestionsBox"),
+  quickStockItemQuickAddSupplierBtn: document.querySelector("#quickStockItemQuickAddSupplierBtn"),
+  quickAddStockItemCancelBtn: document.querySelector("#quickAddStockItemCancelBtn"),
+  quickAddStockItemSaveBtn: document.querySelector("#quickAddStockItemSaveBtn"),
+
   editSupplierModal: document.querySelector("#editSupplierModal"),
   editSupplierName: document.querySelector("#editSupplierName"),
   editSupplierEmail: document.querySelector("#editSupplierEmail"),
@@ -1328,6 +1339,8 @@ function openQuickAddSupplierModal(searchInput, hiddenInput) {
   if (el.stockSearchSuggestionsBox) el.stockSearchSuggestionsBox.style.display = "none";
   if (el.supplierSearchSuggestionsBox) el.supplierSearchSuggestionsBox.style.display = "none";
   if (el.supplierFilterSuggestionsBox) el.supplierFilterSuggestionsBox.style.display = "none";
+  if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
+  if (el.searchSuggestionsBox) el.searchSuggestionsBox.style.display = "none";
 
   // Pre-fill the name with whatever the user already typed in the search box
   const prefill = searchInput?.value.trim() || "";
@@ -1408,6 +1421,159 @@ if (el.editStockQuickAddSupplierBtn) {
   el.editStockQuickAddSupplierBtn.addEventListener("click", () => {
     if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
     openQuickAddSupplierModal(el.editStockSupplierSearch, el.editStockHiddenSupplierId);
+  });
+}
+
+// ---------- Quick Add Stock Item Modal ----------
+// Opened from the + button next to "Search & Select Stock Item" on the Order List page.
+// After saving, the new item is added to Stock Details and auto-selected in whichever
+// search field triggered the modal (so it can be added to the order right away).
+
+let _quickAddStockItemCallerSearchInput = null;
+let _quickAddStockItemCallerHiddenInput = null;
+
+function openQuickAddStockItemModal(searchInput, hiddenInput) {
+  _quickAddStockItemCallerSearchInput = searchInput;
+  _quickAddStockItemCallerHiddenInput = hiddenInput;
+
+  // Close any open suggestion dropdowns so they don't render on top of this modal
+  if (el.searchSuggestionsBox) el.searchSuggestionsBox.style.display = "none";
+  if (el.supplierSuggestionsBox) el.supplierSuggestionsBox.style.display = "none";
+  if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
+  if (el.stockSearchSuggestionsBox) el.stockSearchSuggestionsBox.style.display = "none";
+  if (el.supplierSearchSuggestionsBox) el.supplierSearchSuggestionsBox.style.display = "none";
+  if (el.supplierFilterSuggestionsBox) el.supplierFilterSuggestionsBox.style.display = "none";
+
+  // Pre-fill the item name with whatever the user already typed in the search box
+  const prefill = searchInput?.value.trim() || "";
+  if (el.quickStockItemName) el.quickStockItemName.value = prefill;
+  if (el.quickStockItemUnit) el.quickStockItemUnit.value = "";
+  if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = "";
+  if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
+  if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
+  if (el.quickAddStockItemModal) el.quickAddStockItemModal.style.display = "flex";
+  setTimeout(() => { if (el.quickStockItemName) el.quickStockItemName.focus(); }, 50);
+}
+
+function closeQuickAddStockItemModal() {
+  if (el.quickAddStockItemModal) el.quickAddStockItemModal.style.display = "none";
+  _quickAddStockItemCallerSearchInput = null;
+  _quickAddStockItemCallerHiddenInput = null;
+}
+
+function saveQuickAddStockItemModal() {
+  const name = el.quickStockItemName?.value.trim();
+  const unit = formatUnit(el.quickStockItemUnit?.value || "");
+  const supplierId = el.quickStockItemHiddenSupplierId?.value || "";
+
+  if (!name) {
+    showConfirm("Missing Name", "Please enter an item name.", "OK", false);
+    return;
+  }
+
+  if (!unit) {
+    showConfirm("Missing Unit", "Please enter a unit (pcs, packs, bags, kg, etc.).", "OK", false);
+    return;
+  }
+
+  if (!supplierId || el.quickStockItemSupplierSearch.value.trim() === "") {
+    showConfirm("Missing Supplier", "Please select a supplier from the autocomplete suggestions list. Use the + button if the supplier is not in the list yet.", "OK", false);
+    return;
+  }
+
+  // Duplicate check — same name (case-insensitive) already exists
+  const duplicate = state.stocks.find(
+    s => s.name.trim().toLowerCase() === name.toLowerCase()
+  );
+  if (duplicate) {
+    // Already exists — just select it in the calling field
+    if (_quickAddStockItemCallerSearchInput) _quickAddStockItemCallerSearchInput.value = duplicate.name;
+    if (_quickAddStockItemCallerHiddenInput) _quickAddStockItemCallerHiddenInput.value = duplicate.id;
+    closeQuickAddStockItemModal();
+    return;
+  }
+
+  const newStock = { id: generateUUID(), name, supplierId, unit };
+  state.stocks.push(newStock);
+  saveState();
+  syncToSupabase("stocks", "upsert", { rows: [stockToDb(newStock)] });
+  render();
+
+  // Auto-select the new item in whichever search field triggered the modal
+  if (_quickAddStockItemCallerSearchInput) _quickAddStockItemCallerSearchInput.value = newStock.name;
+  if (_quickAddStockItemCallerHiddenInput) _quickAddStockItemCallerHiddenInput.value = newStock.id;
+
+  closeQuickAddStockItemModal();
+}
+
+if (el.quickAddStockItemSaveBtn) el.quickAddStockItemSaveBtn.addEventListener("click", saveQuickAddStockItemModal);
+if (el.quickAddStockItemCancelBtn) el.quickAddStockItemCancelBtn.addEventListener("click", closeQuickAddStockItemModal);
+if (el.quickAddStockItemModal) {
+  el.quickAddStockItemModal.addEventListener("click", (e) => {
+    if (e.target === el.quickAddStockItemModal) closeQuickAddStockItemModal();
+  });
+}
+if (el.quickStockItemName) {
+  el.quickStockItemName.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
+  });
+}
+if (el.quickStockItemUnit) {
+  el.quickStockItemUnit.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
+  });
+}
+
+// Supplier autocomplete inside the quick add stock item modal
+if (el.quickStockItemSupplierSearch) {
+  const showQuickStockItemSuppliers = () => {
+    const query = el.quickStockItemSupplierSearch.value.trim().toLowerCase();
+    const matches = (query
+      ? state.suppliers.filter(s => s.name.toLowerCase().includes(query))
+      : [...state.suppliers]
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    if (!state.suppliers.length) {
+      el.quickStockItemSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers added yet. Use the + button to add one.</div>`;
+    } else if (!matches.length) {
+      el.quickStockItemSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No matches. Use the + button to add "${escapeHtml(el.quickStockItemSupplierSearch.value.trim())}" as a new supplier.</div>`;
+    } else {
+      el.quickStockItemSupplierSuggestionsBox.innerHTML = matches.map(s =>
+        `<div class="suggestion-item supplier-suggestion-item" data-id="${s.id}" data-name="${escapeHtml(s.name)}">
+          <strong>${escapeHtml(s.name)}</strong>
+        </div>`
+      ).join("");
+    }
+    el.quickStockItemSupplierSuggestionsBox.style.display = "block";
+  };
+
+  el.quickStockItemSupplierSearch.addEventListener("input", showQuickStockItemSuppliers);
+  el.quickStockItemSupplierSearch.addEventListener("focus", showQuickStockItemSuppliers);
+}
+
+if (el.quickStockItemSupplierSuggestionsBox) {
+  el.quickStockItemSupplierSuggestionsBox.addEventListener("mousedown", (e) => {
+    const item = e.target.closest(".supplier-suggestion-item");
+    if (!item) return;
+    e.preventDefault();
+    if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = item.dataset.name;
+    if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = item.dataset.id;
+    el.quickStockItemSupplierSuggestionsBox.style.display = "none";
+  });
+}
+
+// + button inside this modal — for when the supplier isn't in the list yet
+if (el.quickStockItemQuickAddSupplierBtn) {
+  el.quickStockItemQuickAddSupplierBtn.addEventListener("click", () => {
+    if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
+    openQuickAddSupplierModal(el.quickStockItemSupplierSearch, el.quickStockItemHiddenSupplierId);
+  });
+}
+
+// Wire the + button next to "Search & Select Stock Item" on the Order List page
+if (el.quickAddStockItemBtn) {
+  el.quickAddStockItemBtn.addEventListener("click", () => {
+    openQuickAddStockItemModal(el.orderItemSearchInput, el.hiddenOrderItemId);
   });
 }
 
@@ -1971,6 +2137,9 @@ document.addEventListener("click", (event) => {
   }
   if (el.supplierFilterSuggestionsBox && !event.target.closest(".search-suggest-container")) {
     el.supplierFilterSuggestionsBox.style.display = "none";
+  }
+  if (el.quickStockItemSupplierSuggestionsBox && !event.target.closest(".search-suggest-container")) {
+    el.quickStockItemSupplierSuggestionsBox.style.display = "none";
   }
 });
 
