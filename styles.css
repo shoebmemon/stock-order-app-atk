@@ -14,6 +14,7 @@
   --warn-text: #8a5200;
   --ok-bg: #e8f6ec;
   --ok-text: #24713a;
+  --header-height-mobile: 68px;
 }
 
 * {
@@ -82,8 +83,8 @@ select:focus-visible,
 }
 
 .app-header {
-  min-height: 64px;
-  padding: 16px clamp(16px, 4vw, 44px);
+  min-height: 76px;
+  padding: 20px clamp(16px, 4vw, 44px);
   background: #132d34;
   color: #fff;
   display: flex;
@@ -121,8 +122,8 @@ select:focus-visible,
 
 .header-icon-btn {
   flex-shrink: 0;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 46px;
+  min-height: 46px;
   padding: 0;
   border-radius: 50%;
   background: transparent;
@@ -133,8 +134,8 @@ select:focus-visible,
 }
 
 .header-icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 25px;
+  height: 25px;
 }
 
 .header-icon-btn:hover {
@@ -492,14 +493,22 @@ tr:last-child td {
 
 @media (max-width: 700px) {
   body {
+    padding-top: calc(var(--header-height-mobile) + env(safe-area-inset-top));
     padding-bottom: calc(78px + env(safe-area-inset-bottom));
   }
 
   .app-header {
+    position: fixed;
+    z-index: 20;
+    top: 0;
+    left: 0;
+    right: 0;
     align-items: center;
     flex-direction: row;
-    min-height: 0;
-    padding: 14px 16px;
+    min-height: var(--header-height-mobile);
+    padding: 12px 16px;
+    padding-top: max(12px, env(safe-area-inset-top));
+    box-shadow: 0 8px 20px rgba(13, 34, 39, 0.18);
   }
 
   .header-actions {

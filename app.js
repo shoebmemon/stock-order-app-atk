@@ -998,6 +998,7 @@ function setupSupplierLongPressTriggers() {
 }
 
 function startSupplierLongPress(e, row) {
+  cancelSupplierLongPress(); // clear any stale/overlapping timer first
   isLongPressTriggered = false;
   supplierLongPressTimer = setTimeout(() => {
     isLongPressTriggered = true;
