@@ -3061,54 +3061,51 @@ initializeApp();
 
 // --- Mobile keyboard handling -------------------------------------------
 // Fixed top/bottom bars fight with the on-screen keyboard on mobile: the
-// browser resizes the layout in ways that make a fixed bottom bar float
-// above the keyboard and jump around while scrolling. Simplest reliable
-// fix: hide the bottom tab bar whenever a text field has focus, and bring
-// it back on blur. Combined with the resizes-content viewport setting,
-// this keeps things stable across Android Chrome and iOS Safari.
+// browser keeps them pinned to the layout viewport, which doesn't always
+// match the visible (visual) viewport once the keyboard is up, so the bar
+// can appear to float mid-screen or jump while scrolling. Instead of
+// hiding the bar, we keep it always visible and use the visualViewport
+// API to pin it exactly to the bottom edge of the visible area — so it
+// sits directly above the keyboard and stays put.
 (function setupKeyboardHandling() {
-  const FIELD_SELECTOR = "input, select, textarea";
-  let hideTimeout = null;
+  const bar = document.querySelector(".page-tabs");
+  const header = document.querySelector(".app-header");
+  if (!bar || !window.visualViewport) return;
 
-  function isTextEntryField(node) {
-    if (!node || !node.matches) return false;
-    if (!node.matches(FIELD_SELECTOR)) return false;
-    if (node.disabled || node.readOnly) return false;
-    const type = (node.getAttribute("type") || "").toLowerCase();
-    if (["button", "checkbox", "radio", "range", "file", "submit", "reset"].includes(type)) {
-      return false;
+  const vv = window.visualViewport;
+  let rafId = null;
+
+  function pinBars() {
+    rafId = null;
+    // Distance between the bottom of the layout viewport (where the bar
+    // sits by default via `bottom: 0`) and the bottom of what's actually
+    // visible right now. This is 0 with no keyboard, and roughly the
+    // keyboard height when it's open.
+    const offsetFromBottom = Math.max(
+      0,
+      window.innerHeight - (vv.height + vv.offsetTop)
+    );
+    bar.style.transform = offsetFromBottom
+      ? `translateY(-${offsetFromBottom}px)`
+      : "";
+
+    // Keep the top header aligned too, in case the page has scrolled
+    // under it while the keyboard opened (mainly affects iOS Safari).
+    if (header) {
+      header.style.transform = vv.offsetTop
+        ? `translateY(${vv.offsetTop}px)`
+        : "";
     }
-    return true;
   }
 
-  function setKeyboardOpen(open) {
-    clearTimeout(hideTimeout);
-    if (open) {
-      document.body.classList.add("keyboard-open");
-    } else {
-      // Small delay avoids a flicker when focus moves directly between
-      // two fields (blur on one fires just before focus on the next).
-      hideTimeout = setTimeout(() => {
-        document.body.classList.remove("keyboard-open");
-      }, 80);
-    }
+  function schedulePin() {
+    if (rafId !== null) return;
+    rafId = requestAnimationFrame(pinBars);
   }
 
-  document.addEventListener(
-    "focusin",
-    (event) => {
-      if (isTextEntryField(event.target)) setKeyboardOpen(true);
-    },
-    true
-  );
-
-  document.addEventListener(
-    "focusout",
-    (event) => {
-      if (isTextEntryField(event.target)) setKeyboardOpen(false);
-    },
-    true
-  );
+  vv.addEventListener("resize", schedulePin);
+  vv.addEventListener("scroll", schedulePin);
+  window.addEventListener("orientationchange", schedulePin);
 })();
 
 if (location.hash) {
