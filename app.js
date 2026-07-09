@@ -3059,6 +3059,58 @@ function initializeApp() {
 
 initializeApp();
 
+// --- Mobile keyboard handling -------------------------------------------
+// Fixed top/bottom bars fight with the on-screen keyboard on mobile: the
+// browser resizes the layout in ways that make a fixed bottom bar float
+// above the keyboard and jump around while scrolling. Simplest reliable
+// fix: hide the bottom tab bar whenever a text field has focus, and bring
+// it back on blur. Combined with the resizes-content viewport setting,
+// this keeps things stable across Android Chrome and iOS Safari.
+(function setupKeyboardHandling() {
+  const FIELD_SELECTOR = "input, select, textarea";
+  let hideTimeout = null;
+
+  function isTextEntryField(node) {
+    if (!node || !node.matches) return false;
+    if (!node.matches(FIELD_SELECTOR)) return false;
+    if (node.disabled || node.readOnly) return false;
+    const type = (node.getAttribute("type") || "").toLowerCase();
+    if (["button", "checkbox", "radio", "range", "file", "submit", "reset"].includes(type)) {
+      return false;
+    }
+    return true;
+  }
+
+  function setKeyboardOpen(open) {
+    clearTimeout(hideTimeout);
+    if (open) {
+      document.body.classList.add("keyboard-open");
+    } else {
+      // Small delay avoids a flicker when focus moves directly between
+      // two fields (blur on one fires just before focus on the next).
+      hideTimeout = setTimeout(() => {
+        document.body.classList.remove("keyboard-open");
+      }, 80);
+    }
+  }
+
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      if (isTextEntryField(event.target)) setKeyboardOpen(true);
+    },
+    true
+  );
+
+  document.addEventListener(
+    "focusout",
+    (event) => {
+      if (isTextEntryField(event.target)) setKeyboardOpen(false);
+    },
+    true
+  );
+})();
+
 if (location.hash) {
   const pageId = location.hash.slice(1);
   if (document.getElementById(pageId)) {

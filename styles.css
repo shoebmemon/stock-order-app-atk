@@ -509,6 +509,19 @@ tr:last-child td {
     padding: 12px 16px;
     padding-top: max(12px, env(safe-area-inset-top));
     box-shadow: 0 8px 20px rgba(13, 34, 39, 0.18);
+    transition: transform 0.18s ease;
+  }
+
+  /* While the on-screen keyboard is open, slide the bottom tab bar out of
+     view instead of letting it float above the keyboard. The class is
+     toggled from JS on focus/blur of inputs, selects, and textareas. */
+  body.keyboard-open .page-tabs {
+    transform: translateY(100%);
+    pointer-events: none;
+  }
+
+  body.keyboard-open {
+    padding-bottom: 0;
   }
 
   .header-actions {
@@ -529,6 +542,7 @@ tr:last-child td {
     border-top: 1px solid var(--line);
     background: rgba(245, 247, 248, 0.96);
     box-shadow: 0 -8px 20px rgba(13, 34, 39, 0.08);
+    transition: transform 0.18s ease;
   }
 
   .tab-button {
