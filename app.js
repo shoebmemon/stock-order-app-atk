@@ -3183,23 +3183,29 @@ if (location.hash) {
 syncOnStartup();
 
 // --- Mobile Keyboard Fix: Hide bottom tab bar while typing ---
-if (typeof document !== "undefined") {
-  document.addEventListener("focusin", (e) => {
-    const tag = e.target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
-      document.body.classList.add("keyboard-open");
-    }
-  });
+// --- Improved Mobile Keyboard Fix: Detects actual screen resizing ---
+let maxViewportHeight = window.innerHeight;
 
-  document.addEventListener("focusout", (e) => {
-    const tag = e.target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
-      // Small delay prevents flickering if the user taps directly from one input to another
-      setTimeout(() => {
-        if (!document.activeElement || !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
-          document.body.classList.remove("keyboard-open");
-        }
-      }, 50);
+window.addEventListener("resize", () => {
+  // Account for device rotation by updating the max height
+  if (window.innerHeight > maxViewportHeight) {
+    maxViewportHeight = window.innerHeight;
+  }
+  
+  // If the screen height shrinks by more than 150px, the keyboard is open
+  if (window.innerHeight < maxViewportHeight - 150) {
+    document.body.classList.add("keyboard-open");
+  } else {
+    // Keyboard is closed (via back button or swipe)
+    document.body.classList.remove("keyboard-open");
+  }
+});
+
+// Fallback: Also clear it if the user taps outside an input
+document.addEventListener("focusout", () => {
+  setTimeout(() => {
+    if (!document.activeElement || !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
+      document.body.classList.remove("keyboard-open");
     }
-  });
-}
+  }, 50);
+});
