@@ -1055,7 +1055,10 @@ if (el.quickAddStockItemModal) el.quickAddStockItemModal.addEventListener("click
 if (el.quickStockItemName) el.quickStockItemName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); } });
 if (el.quickStockItemUnit) el.quickStockItemUnit.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); } });
 if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); } });
+if (el.quickStockItemNewSupplierEmail) el.quickStockItemNewSupplierEmail.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); } });
+if (el.quickStockItemNewSupplierPhone) el.quickStockItemNewSupplierPhone.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); } });
 
+// Supplier autocomplete inside the quick add stock item modal
 if (el.quickStockItemSupplierSearch) {
   const showQuickStockItemSuppliers = () => {
     const query = el.quickStockItemSupplierSearch.value.trim().toLowerCase();
@@ -1465,7 +1468,7 @@ function buildCsvText() { const rows = buildStockExportRows(); const lines = [CS
 function buildExcelHtml() {
   const rows = buildStockExportRows(); const headerCells = CSV_HEADERS.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
   const bodyRows = rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.supplier)}</td><td>${escapeHtml(row.unit)}</td><td>${escapeHtml(row.email)}</td><td>${escapeHtml(row.phone)}</td></tr>`).join("");
-  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Stock</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table border="1"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"></head><body><table border="1"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
 }
 if (el.exportCsvBtn) el.exportCsvBtn.addEventListener("click", () => { if (!state.stocks.length) { alert("There are no stock items to export yet."); return; } downloadBlob(buildCsvText(), "shop-stock-list.csv", "text/csv;charset=utf-8;"); });
 if (el.exportExcelBtn) el.exportExcelBtn.addEventListener("click", () => { if (!state.stocks.length) { alert("There are no stock items to export yet."); return; } downloadBlob(buildExcelHtml(), "shop-stock-list.xls", "application/vnd.ms-excel"); });
@@ -1618,18 +1621,20 @@ window.addEventListener("popstate", () => {
   }
 });
 
-// --- WhatsApp-style Swipe Between Tabs ---
+// --- High-Performance WhatsApp-style Swipe Between Tabs ---
 let swipeStartX = 0;
 let swipeStartY = 0;
+let swipeStartTime = 0;
 
 if (el.appShell) {
   el.appShell.addEventListener("touchstart", (e) => {
     swipeStartX = e.changedTouches[0].screenX;
     swipeStartY = e.changedTouches[0].screenY;
+    swipeStartTime = Date.now();
   }, { passive: true });
 
   el.appShell.addEventListener("touchend", (e) => {
-    // Disable swiping if deep views, modals, or keyboard are active
+    // Prevent swiping if input keyboard, deep layout views, or contextual selection layers are active
     if (
       document.body.classList.contains("keyboard-open") ||
       (el.deepView && el.deepView.style.display === "block") ||
@@ -1639,24 +1644,41 @@ if (el.appShell) {
     const modals = [el.confirmModal, el.alreadyInListModal, el.editStockModal, el.editSupplierModal, el.quickAddSupplierModal, el.quickAddStockItemModal, el.editQtyModal];
     if (modals.some(m => m && m.style.display === "flex")) return;
 
+    // Smart Isolation: Skip page swipe if user is dragging an active horizontally scrollable container (like data tables)
+    let targetNode = e.target;
+    while (targetNode && targetNode !== el.appShell) {
+      if (targetNode.scrollWidth > targetNode.clientWidth) {
+        const overflowX = window.getComputedStyle(targetNode).overflowX;
+        if (overflowX === "auto" || overflowX === "scroll" || targetNode.classList.contains("table-wrap")) {
+          return; 
+        }
+      }
+      targetNode = targetNode.parentNode;
+    }
+
     const swipeEndX = e.changedTouches[0].screenX;
     const swipeEndY = e.changedTouches[0].screenY;
-    const diffX = swipeStartX - swipeEndX; // Positive means swiped left
-    const diffY = Math.abs(swipeStartY - swipeEndY);
+    
+    const diffX = swipeStartX - swipeEndX; 
+    const diffY = swipeStartY - swipeEndY;
+    const elapsedTime = Date.now() - swipeStartTime;
 
-    // Require distinct horizontal swipe (min 70px left/right, max 40px up/down)
-    if (Math.abs(diffX) > 70 && diffY < 40) {
-      const tabs = Array.from(el.tabButtons);
-      const currentIndex = tabs.findIndex(btn => btn.classList.contains("active"));
-      
-      if (currentIndex === -1) return;
+    const absX = Math.abs(diffX);
+    const absY = Math.abs(diffY);
 
-      if (diffX > 0 && currentIndex < tabs.length - 1) {
-        // Swiped Left -> Go to Next Tab
-        tabs[currentIndex + 1].click();
-      } else if (diffX < 0 && currentIndex > 0) {
-        // Swiped Right -> Go to Prev Tab
-        tabs[currentIndex - 1].click();
+    // 1. Vector Ratio Check: Must be a distinct horizontal gesture (horizontal travel must be double the vertical noise)
+    // 2. Momentum Trigger: True if swipe clears 60px distance OR is a swift flick (>30px under 250ms)
+    if (absX > absY * 2) {
+      if (absX > 60 || (absX > 30 && elapsedTime < 250)) {
+        const tabs = Array.from(el.tabButtons);
+        const currentIndex = tabs.findIndex(btn => btn.classList.contains("active"));
+        if (currentIndex === -1) return;
+
+        if (diffX > 0 && currentIndex < tabs.length - 1) {
+          tabs[currentIndex + 1].click(); // Swipe Left -> Next Tab Layer
+        } else if (diffX < 0 && currentIndex > 0) {
+          tabs[currentIndex - 1].click(); // Swipe Right -> Previous Tab Layer
+        }
       }
     }
   }, { passive: true });
