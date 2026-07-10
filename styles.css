@@ -230,6 +230,8 @@ h2 {
   max-width: 1180px;
   margin: 0 auto;
   width: 100%;
+  position: relative;
+  z-index: 10;
 }
 
 .page[hidden] {

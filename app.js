@@ -2880,7 +2880,7 @@ function buildExcelHtml() {
     .join("");
 
   return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Stock</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<head><meta charset="utf-8"></head>
 <body>
 <table border="1">
 <thead><tr>${headerCells}</tr></thead>
@@ -3182,7 +3182,6 @@ if (location.hash) {
 // the latest shared data and re-renders if anything changed.
 syncOnStartup();
 
-// --- Mobile Keyboard Fix: Hide bottom tab bar while typing ---
 // --- Improved Mobile Keyboard Fix: Detects actual screen resizing ---
 let maxViewportHeight = window.innerHeight;
 
