@@ -4,7 +4,6 @@ function generateUUID() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  // Fallback that still produces a valid UUID v4 string (Supabase's "id" columns are type uuid)
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
@@ -22,10 +21,6 @@ let editingSupplierId = null;
 let editingStockId = null;
 
 // ---------- Supabase sync layer ----------
-// Local storage stays the instant, offline-first source of truth. Every change
-// is also pushed to Supabase in the background; if that fails (offline, etc.)
-// it's queued in SYNC_QUEUE_KEY and retried automatically once back online.
-
 const SUPABASE_URL = "https://jtaljezaydoauwcdkogo.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0YWxqZXpheWRvYXV3Y2Rrb2dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MDAxNTUsImV4cCI6MjA5NzQ3NjE1NX0.0SxH9mMtJ1ze4D_ZPJUCb2PH-uVH6pui8OsX0bKOaCw";
 const SYNC_QUEUE_KEY = "shop-stock-order-app-sync-queue-v1";
@@ -35,245 +30,103 @@ const sb =
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
     : null;
 
-// --- App-shape <-> DB-column mapping ---
-function supplierToDb(s) {
-  return {
-    id: s.id,
-    supplier_name: s.name || "",
-    email: s.email || null,
-    phone: s.phone || null
-  };
-}
-function supplierFromDb(row) {
-  return { id: row.id, name: row.supplier_name || "", email: row.email || "", phone: row.phone || "" };
-}
-function stockToDb(item) {
-  return {
-    id: item.id,
-    item_name: item.name || "",
-    supplier_id: item.supplierId || null,
-    unit: item.unit || null
-  };
-}
-function stockFromDb(row) {
-  return { id: row.id, name: row.item_name || "", supplierId: row.supplier_id || "", unit: row.unit || "" };
-}
+function supplierToDb(s) { return { id: s.id, supplier_name: s.name || "", email: s.email || null, phone: s.phone || null }; }
+function supplierFromDb(row) { return { id: row.id, name: row.supplier_name || "", email: row.email || "", phone: row.phone || "" }; }
+function stockToDb(item) { return { id: item.id, item_name: item.name || "", supplier_id: item.supplierId || null, unit: item.unit || null }; }
+function stockFromDb(row) { return { id: row.id, name: row.item_name || "", supplierId: row.supplier_id || "", unit: row.unit || "" }; }
 function orderToDb(line) {
-  return {
-    id: line.id,
-    item_id: line.itemId || null,
-    supplier_id: line.supplierId || null,
-    quantity: Number(line.quantity) || 1,
-    status: line.status || "active",
-    batch_id: line.batchId || null,
-    date_completed: line.dateCompleted || null
-  };
+  return { id: line.id, item_id: line.itemId || null, supplier_id: line.supplierId || null, quantity: Number(line.quantity) || 1, status: line.status || "active", batch_id: line.batchId || null, date_completed: line.dateCompleted || null };
 }
 function orderFromDb(row) {
-  return {
-    id: row.id,
-    itemId: row.item_id,
-    supplierId: row.supplier_id,
-    quantity: Number(row.quantity) || 1,
-    status: row.status || "active",
-    dateCreated: row.created_at || getFormattedDate(),
-    batchId: row.batch_id || null,
-    dateCompleted: row.date_completed || null
-  };
+  return { id: row.id, itemId: row.item_id, supplierId: row.supplier_id, quantity: Number(row.quantity) || 1, status: row.status || "active", dateCreated: row.created_at || getFormattedDate(), batchId: row.batch_id || null, dateCompleted: row.date_completed || null };
 }
 
-// --- Offline queue persistence ---
-function loadSyncQueue() {
-  try {
-    const raw = localStorage.getItem(SYNC_QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-function saveSyncQueue(queue) {
-  try {
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
-  } catch (err) {
-    console.warn("Could not persist sync queue:", err);
-  }
-}
-function enqueueSync(table, op, payload) {
-  const queue = loadSyncQueue();
-  queue.push({ table, op, payload, queuedAt: Date.now() });
-  saveSyncQueue(queue);
-}
+function loadSyncQueue() { try { const raw = localStorage.getItem(SYNC_QUEUE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; } }
+function saveSyncQueue(queue) { try { localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue)); } catch (err) { console.warn("Could not persist sync queue:", err); } }
+function enqueueSync(table, op, payload) { const queue = loadSyncQueue(); queue.push({ table, op, payload, queuedAt: Date.now() }); saveSyncQueue(queue); }
 
-// --- Executes a single queued/immediate operation against Supabase ---
 async function runSupabaseOp(table, op, payload) {
   if (!sb) throw new Error("Supabase client not available");
-
-  if (op === "upsert") {
-    const { error } = await sb.from(table).upsert(payload.rows);
-    if (error) throw error;
-  } else if (op === "delete") {
-    if (!payload.ids || !payload.ids.length) return;
-    const { error } = await sb.from(table).delete().in("id", payload.ids);
-    if (error) throw error;
-  } else if (op === "deleteWhere") {
+  if (op === "upsert") { const { error } = await sb.from(table).upsert(payload.rows); if (error) throw error; }
+  else if (op === "delete") { if (!payload.ids || !payload.ids.length) return; const { error } = await sb.from(table).delete().in("id", payload.ids); if (error) throw error; }
+  else if (op === "deleteWhere") {
     let query = sb.from(table).delete();
-    Object.entries(payload.match || {}).forEach(([col, val]) => {
-      query = query.eq(col, val);
-    });
-    if (payload.inFilter) {
-      query = query.in(payload.inFilter.column, payload.inFilter.values);
-    }
-    const { error } = await query;
-    if (error) throw error;
+    Object.entries(payload.match || {}).forEach(([col, val]) => query = query.eq(col, val));
+    if (payload.inFilter) query = query.in(payload.inFilter.column, payload.inFilter.values);
+    const { error } = await query; if (error) throw error;
   } else if (op === "replaceAll") {
-    // Used for CSV/Excel import and full JSON restores: wipe the table, then
-    // insert the freshly imported rows.
-    const { error: delErr } = await sb.from(table).delete().not("id", "is", null);
-    if (delErr) throw delErr;
-    if (payload.rows && payload.rows.length) {
-      const { error: insErr } = await sb.from(table).insert(payload.rows);
-      if (insErr) throw insErr;
-    }
+    const { error: delErr } = await sb.from(table).delete().not("id", "is", null); if (delErr) throw delErr;
+    if (payload.rows && payload.rows.length) { const { error: insErr } = await sb.from(table).insert(payload.rows); if (insErr) throw insErr; }
   }
 }
 
-// --- Public sync entry point: try immediately, queue on any failure ---
 async function syncToSupabase(table, op, payload) {
-  if (!sb || typeof navigator !== "undefined" && navigator.onLine === false) {
-    enqueueSync(table, op, payload);
-    return;
-  }
-  try {
-    await runSupabaseOp(table, op, payload);
-  } catch (err) {
-    console.warn(`Supabase sync failed for ${table}/${op}, queued for retry:`, err);
-    enqueueSync(table, op, payload);
-  }
+  if (!sb || typeof navigator !== "undefined" && navigator.onLine === false) { enqueueSync(table, op, payload); return; }
+  try { await runSupabaseOp(table, op, payload); } catch (err) { console.warn(`Supabase sync failed, queued:`, err); enqueueSync(table, op, payload); }
 }
 
-// --- Flushes any queued offline changes, in order, stopping at the first failure ---
 let isFlushingQueue = false;
 async function flushSyncQueue() {
-  if (!sb || isFlushingQueue) return;
-  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-
-  const queue = loadSyncQueue();
-  if (!queue.length) return;
-
-  isFlushingQueue = true;
-  let remaining = [...queue];
-
+  if (!sb || isFlushingQueue || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+  const queue = loadSyncQueue(); if (!queue.length) return;
+  isFlushingQueue = true; let remaining = [...queue];
   while (remaining.length) {
     const op = remaining[0];
-    try {
-      await runSupabaseOp(op.table, op.op, op.payload);
-      remaining.shift();
-      saveSyncQueue(remaining);
-    } catch (err) {
-      console.warn("Still offline or sync error, will retry later:", err);
-      break;
-    }
+    try { await runSupabaseOp(op.table, op.op, op.payload); remaining.shift(); saveSyncQueue(remaining); } 
+    catch (err) { break; }
   }
-
   isFlushingQueue = false;
 }
 
-// --- Pulls fresh data from Supabase and replaces local state (used on startup) ---
 async function pullFromSupabase() {
   if (!sb || (typeof navigator !== "undefined" && navigator.onLine === false)) return false;
-
   try {
-    const [suppliersRes, stocksRes, ordersRes] = await Promise.all([
-      sb.from("suppliers").select("*"),
-      sb.from("stocks").select("*"),
-      sb.from("orders").select("*")
-    ]);
-
-    if (suppliersRes.error) throw suppliersRes.error;
-    if (stocksRes.error) throw stocksRes.error;
-    if (ordersRes.error) throw ordersRes.error;
-
-    state = {
-      suppliers: (suppliersRes.data || []).map(supplierFromDb),
-      stocks: (stocksRes.data || []).map(stockFromDb),
-      order: (ordersRes.data || []).map(orderFromDb)
-    };
-    saveState();
-    return true;
-  } catch (err) {
-    console.warn("Could not pull from Supabase, using local data:", err);
-    return false;
-  }
+    const [suppliersRes, stocksRes, ordersRes] = await Promise.all([ sb.from("suppliers").select("*"), sb.from("stocks").select("*"), sb.from("orders").select("*") ]);
+    if (suppliersRes.error) throw suppliersRes.error; if (stocksRes.error) throw stocksRes.error; if (ordersRes.error) throw ordersRes.error;
+    state = { suppliers: (suppliersRes.data || []).map(supplierFromDb), stocks: (stocksRes.data || []).map(stockFromDb), order: (ordersRes.data || []).map(orderFromDb) };
+    saveState(); return true;
+  } catch (err) { return false; }
 }
 
-// --- Pushes the CURRENT local data up to Supabase (parents before children) ---
-// Used the very first time this device connects to a Supabase project that
-// doesn't have any data yet, so we never overwrite real local data with an
-// empty remote table.
 async function pushAllLocalDataToSupabase() {
-  if (state.suppliers.length) {
-    await syncToSupabase("suppliers", "upsert", { rows: state.suppliers.map(supplierToDb) });
-  }
-  if (state.stocks.length) {
-    await syncToSupabase("stocks", "upsert", { rows: state.stocks.map(stockToDb) });
-  }
-  if (state.order.length) {
-    await syncToSupabase("orders", "upsert", { rows: state.order.map(orderToDb) });
-  }
+  if (state.suppliers.length) await syncToSupabase("suppliers", "upsert", { rows: state.suppliers.map(supplierToDb) });
+  if (state.stocks.length) await syncToSupabase("stocks", "upsert", { rows: state.stocks.map(stockToDb) });
+  if (state.order.length) await syncToSupabase("orders", "upsert", { rows: state.order.map(orderToDb) });
 }
 
-// --- On startup: push queued offline changes, then decide push-vs-pull ---
 const INITIAL_SEED_DONE_KEY = "shop-stock-order-app-initial-seed-done-v1";
-
 async function syncOnStartup() {
   if (!sb) return;
   await flushSyncQueue();
-
   const alreadySeeded = localStorage.getItem(INITIAL_SEED_DONE_KEY) === "true";
-  const hasLocalData =
-    !isUsingDemoData &&
-    (state.suppliers.length > 0 || state.stocks.length > 0 || state.order.length > 0);
+  const hasLocalData = !isUsingDemoData && (state.suppliers.length > 0 || state.stocks.length > 0 || state.order.length > 0);
 
   if (!alreadySeeded && hasLocalData) {
     try {
       const { count, error } = await sb.from("suppliers").select("*", { count: "exact", head: true });
       const remoteIsEmpty = !error && (count || 0) === 0;
-
-      if (remoteIsEmpty) {
-        // First time this device has connected to Supabase: push local data up
-        // rather than pulling the empty remote tables and wiping it out.
-        await pushAllLocalDataToSupabase();
-        localStorage.setItem(INITIAL_SEED_DONE_KEY, "true");
-        return;
-      }
-    } catch (err) {
-      console.warn("Could not check remote data before initial sync:", err);
-      return; // stay on local data rather than risk overwriting it
-    }
+      if (remoteIsEmpty) { await pushAllLocalDataToSupabase(); localStorage.setItem(INITIAL_SEED_DONE_KEY, "true"); return; }
+    } catch (err) { return; }
   }
-
   localStorage.setItem(INITIAL_SEED_DONE_KEY, "true");
   const pulled = await pullFromSupabase();
   if (pulled) render();
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener("online", () => {
-    flushSyncQueue().then(() => pullFromSupabase().then((pulled) => { if (pulled) render(); }));
-  });
+  window.addEventListener("online", () => { flushSyncQueue().then(() => pullFromSupabase().then((pulled) => { if (pulled) render(); })); });
 }
 
 let currentStatusFilter = "active"; 
 let focusedSupplierId = null;
 let focusedBatchId = null;
-
 let longPressTimer = null;
 let isLongPressTriggered = false;
 const LONG_PRESS_DURATION = 600;
-
 let selectedQuickOrderItem = null;
 
 const el = {
+  appShell: document.querySelector(".app-shell"),
   stockForm: document.querySelector("#stockForm"),
   supplierForm: document.querySelector("#supplierForm"),
   orderForm: document.querySelector("#orderForm"),
@@ -289,14 +142,10 @@ const el = {
   stockSearch: document.querySelector("#stockSearch"),
   recentOrderAlert: document.querySelector("#recentOrderAlert"),
   stockSubmitBtn: document.querySelector("#stockSubmitBtn"),
-  
-  // Autocomplete Supplier Nodes
   stockSupplierSearchInput: document.querySelector("#stockSupplierSearchInput"),
   hiddenStockSupplierId: document.querySelector("#hiddenStockSupplierId"),
   supplierSuggestionsBox: document.querySelector("#supplierSuggestionsBox"),
-  
   orderQtyInlineUnit: document.querySelector("#orderQtyInlineUnit"),
-  
   pillActive: document.querySelector("#pillActive"),
   pillCompleted: document.querySelector("#pillCompleted"),
   masterView: document.querySelector("#orderDetailsMasterView"),
@@ -309,20 +158,16 @@ const el = {
   deepWhatsAppBtn: document.querySelector("#deepWhatsAppBtn"),
   deepEmailBtn: document.querySelector("#deepEmailBtn"),
   deepViewActionsContainer: document.querySelector("#deepViewActionsContainer"),
-  
   bulkDeleteToolbar: document.querySelector("#bulkDeleteToolbar"),
   bulkDeleteCountLabel: document.querySelector("#bulkDeleteCountLabel"),
   bulkDeleteCancelBtn: document.querySelector("#bulkDeleteCancelBtn"),
   bulkDeleteExecuteBtn: document.querySelector("#bulkDeleteExecuteBtn"),
-
   masterBulkDeleteToolbar: document.querySelector("#masterBulkDeleteToolbar"),
   masterBulkDeleteCountLabel: document.querySelector("#masterBulkDeleteCountLabel"),
   masterBulkDeleteCancelBtn: document.querySelector("#masterBulkDeleteCancelBtn"),
   masterBulkDeleteExecuteBtn: document.querySelector("#masterBulkDeleteExecuteBtn"),
-
   pages: document.querySelectorAll(".page"),
   tabButtons: document.querySelectorAll(".tab-button"),
-
   headerTitleView: document.querySelector("#headerTitleView"),
   headerAddStockBtn: document.querySelector("#headerAddStockBtn"),
   stockPageAddItemBtn: document.querySelector("#stockPageAddItemBtn"),
@@ -331,12 +176,10 @@ const el = {
   headerSelectionCancelBtn: document.querySelector("#headerSelectionCancelBtn"),
   headerSelectionEditBtn: document.querySelector("#headerSelectionEditBtn"),
   headerSelectionDeleteBtn: document.querySelector("#headerSelectionDeleteBtn"),
-
   exportCsvBtn: document.querySelector("#exportCsvBtn"),
   exportExcelBtn: document.querySelector("#exportExcelBtn"),
   exportDataBtn: document.querySelector("#exportDataBtn"),
   importDataInput: document.querySelector("#importDataInput"),
-
   stockSearchSuggestionsBox: document.querySelector("#stockSearchSuggestionsBox"),
   stockQuickOrderBar: document.querySelector("#stockQuickOrderBar"),
   stockQuickOrderItemName: document.querySelector("#stockQuickOrderItemName"),
@@ -346,34 +189,28 @@ const el = {
   stockQuickOrderAddBtn: document.querySelector("#stockQuickOrderAddBtn"),
   stockQuickOrderCancelBtn: document.querySelector("#stockQuickOrderCancelBtn"),
   stockQuickOrderAlert: document.querySelector("#stockQuickOrderAlert"),
-
   supplierSearchInput: document.querySelector("#supplierSearchInput"),
   supplierSearchSuggestionsBox: document.querySelector("#supplierSearchSuggestionsBox"),
-
   supplierMasterView: document.querySelector("#supplierMasterView"),
   supplierStockDetailView: document.querySelector("#supplierStockDetailView"),
   supplierStockBackBtn: document.querySelector("#supplierStockBackBtn"),
   supplierStockDetailName: document.querySelector("#supplierStockDetailName"),
   supplierStockDetailContact: document.querySelector("#supplierStockDetailContact"),
   supplierStockDetailList: document.querySelector("#supplierStockDetailList"),
-
   stockBulkDeleteBar: document.querySelector("#stockBulkDeleteBar"),
   stockBulkDeleteCount: document.querySelector("#stockBulkDeleteCount"),
   stockBulkDeleteCancelBtn: document.querySelector("#stockBulkDeleteCancelBtn"),
   stockBulkDeleteExecuteBtn: document.querySelector("#stockBulkDeleteExecuteBtn"),
-
   alreadyInListModal: document.querySelector("#alreadyInListModal"),
   alreadyInListTitle: document.querySelector("#alreadyInListTitle"),
   alreadyInListBody: document.querySelector("#alreadyInListBody"),
   alreadyInListNoBtn: document.querySelector("#alreadyInListNoBtn"),
   alreadyInListEditBtn: document.querySelector("#alreadyInListEditBtn"),
-
   confirmModal: document.querySelector("#confirmModal"),
   confirmModalTitle: document.querySelector("#confirmModalTitle"),
   confirmModalBody: document.querySelector("#confirmModalBody"),
   confirmModalCancelBtn: document.querySelector("#confirmModalCancelBtn"),
   confirmModalOkBtn: document.querySelector("#confirmModalOkBtn"),
-
   editStockModal: document.querySelector("#editStockModal"),
   editStockName: document.querySelector("#editStockName"),
   editStockSupplierSearch: document.querySelector("#editStockSupplierSearch"),
@@ -383,7 +220,6 @@ const el = {
   editStockCancelBtn: document.querySelector("#editStockCancelBtn"),
   editStockSaveBtn: document.querySelector("#editStockSaveBtn"),
   editStockQuickAddSupplierBtn: document.querySelector("#editStockQuickAddSupplierBtn"),
-
   quickAddSupplierBtn: document.querySelector("#quickAddSupplierBtn"),
   quickAddSupplierModal: document.querySelector("#quickAddSupplierModal"),
   quickSupplierName: document.querySelector("#quickSupplierName"),
@@ -391,7 +227,6 @@ const el = {
   quickSupplierPhone: document.querySelector("#quickSupplierPhone"),
   quickAddSupplierCancelBtn: document.querySelector("#quickAddSupplierCancelBtn"),
   quickAddSupplierSaveBtn: document.querySelector("#quickAddSupplierSaveBtn"),
-
   quickAddStockItemBtn: document.querySelector("#quickAddStockItemBtn"),
   quickAddStockItemModal: document.querySelector("#quickAddStockItemModal"),
   quickStockItemName: document.querySelector("#quickStockItemName"),
@@ -406,14 +241,12 @@ const el = {
   quickStockItemNewSupplierPhone: document.querySelector("#quickStockItemNewSupplierPhone"),
   quickAddStockItemCancelBtn: document.querySelector("#quickAddStockItemCancelBtn"),
   quickAddStockItemSaveBtn: document.querySelector("#quickAddStockItemSaveBtn"),
-
   editSupplierModal: document.querySelector("#editSupplierModal"),
   editSupplierName: document.querySelector("#editSupplierName"),
   editSupplierEmail: document.querySelector("#editSupplierEmail"),
   editSupplierPhone: document.querySelector("#editSupplierPhone"),
   editSupplierCancelBtn: document.querySelector("#editSupplierCancelBtn"),
   editSupplierSaveBtn: document.querySelector("#editSupplierSaveBtn"),
-
   editQtyModal: document.querySelector("#editQtyModal"),
   editQtyModalTitle: document.querySelector("#editQtyModalTitle"),
   editQtyItemName: document.querySelector("#editQtyItemName"),
@@ -425,73 +258,27 @@ const el = {
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return emptyState();
-
   try {
     const parsed = JSON.parse(saved);
-    return {
-      suppliers: parsed.suppliers || [],
-      stocks: (parsed.stocks || []).map(normalizeStockItem),
-      order: parsed.order || []
-    };
-  } catch {
-    return emptyState();
-  }
+    return { suppliers: parsed.suppliers || [], stocks: (parsed.stocks || []).map(normalizeStockItem), order: parsed.order || [] };
+  } catch { return emptyState(); }
 }
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function supplierName(id) {
-  return state.suppliers.find((supplier) => supplier.id === id)?.name || "No supplier";
-}
-
-function keepSelectValue(select, value) {
-  if (select && [...select.options].some((option) => option.value === value)) {
-    select.value = value;
-  }
-}
-
-function formatNumber(value) {
-  return Number(value || 0).toLocaleString("en-IN");
-}
-
-function formatUnit(value) {
-  return String(value || "").trim();
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  }[char]));
-}
-
-function clearInlineUnitLabel() {
-  if (el.orderQtyInlineUnit) el.orderQtyInlineUnit.textContent = "";
-}
+function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function supplierName(id) { return state.suppliers.find((supplier) => supplier.id === id)?.name || "No supplier"; }
+function keepSelectValue(select, value) { if (select && [...select.options].some((option) => option.value === value)) select.value = value; }
+function formatNumber(value) { return Number(value || 0).toLocaleString("en-IN"); }
+function formatUnit(value) { return String(value || "").trim(); }
+function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
+function clearInlineUnitLabel() { if (el.orderQtyInlineUnit) el.orderQtyInlineUnit.textContent = ""; }
 
 function addOrUpdateOrderLine(item, qty) {
   const quantity = Math.max(1, Number(qty) || 1);
-  const existingLine = state.order.find(
-    (line) => line.itemId === item.id && (line.status || "active") === "active"
-  );
-
+  const existingLine = state.order.find((line) => line.itemId === item.id && (line.status || "active") === "active");
   if (existingLine) {
     existingLine.quantity = Number(existingLine.quantity || 0) + quantity;
     syncToSupabase("orders", "upsert", { rows: [orderToDb(existingLine)] });
   } else {
-    const newLine = {
-      id: generateUUID(),
-      itemId: item.id,
-      supplierId: item.supplierId,
-      quantity,
-      status: "active",
-      dateCreated: getFormattedDate()
-    };
+    const newLine = { id: generateUUID(), itemId: item.id, supplierId: item.supplierId, quantity, status: "active", dateCreated: getFormattedDate() };
     state.order.push(newLine);
     syncToSupabase("orders", "upsert", { rows: [orderToDb(newLine)] });
   }
@@ -499,42 +286,24 @@ function addOrUpdateOrderLine(item, qty) {
 
 function toggleActiveCompletedState(supplierId, newStatus, batchId) {
   const changedLines = [];
-
   if (newStatus === "completed") {
-    // Sending an order: every currently-active line for this supplier becomes
-    // one new, distinct batch — so sending again later creates a separate
-    // entry instead of merging into the same completed group.
     const newBatchId = generateUUID();
     const completedDate = new Date().toISOString();
     state.order.forEach((line) => {
       if (line.supplierId === supplierId && (line.status || "active") !== "completed") {
-        line.status = "completed";
-        line.batchId = newBatchId;
-        line.dateCompleted = completedDate;
-        changedLines.push(line);
+        line.status = "completed"; line.batchId = newBatchId; line.dateCompleted = completedDate; changedLines.push(line);
       }
     });
   } else {
-    // Reverting to active: only un-complete the specific batch being viewed,
-    // not every completed order this supplier has ever had.
     state.order.forEach((line) => {
-      if (
-        line.supplierId === supplierId &&
-        (line.status || "active") === "completed" &&
-        (line.batchId || "") === (batchId || "")
-      ) {
-        line.status = "active";
-        line.batchId = null;
-        changedLines.push(line);
+      if (line.supplierId === supplierId && (line.status || "active") === "completed" && (line.batchId || "") === (batchId || "")) {
+        line.status = "active"; line.batchId = null; changedLines.push(line);
       }
     });
   }
-
   saveState();
-  if (changedLines.length) {
-    syncToSupabase("orders", "upsert", { rows: changedLines.map(orderToDb) });
-  }
-
+  if (changedLines.length) syncToSupabase("orders", "upsert", { rows: changedLines.map(orderToDb) });
+  
   resetDeepSelection();
   if (el.deepView) el.deepView.style.display = "none";
   if (el.masterView) el.masterView.style.display = "block";
@@ -542,61 +311,34 @@ function toggleActiveCompletedState(supplierId, newStatus, batchId) {
 }
 
 function buildCleanTextPayload(supplierId) {
-  const lines = state.order.filter(
-    (line) => line.supplierId === supplierId && (line.status || "active") === currentStatusFilter
-  );
-
-  return lines
-    .map((line) => {
-      const item = state.stocks.find((s) => s.id === line.itemId);
-      return `- ${item ? item.name : "Deleted item"}: ${formatNumber(line.quantity)} ${item?.unit || "pcs"}`;
-    })
-    .join("\n");
+  const lines = state.order.filter((line) => line.supplierId === supplierId && (line.status || "active") === currentStatusFilter);
+  return lines.map((line) => {
+    const item = state.stocks.find((s) => s.id === line.itemId);
+    return `- ${item ? item.name : "Deleted item"}: ${formatNumber(line.quantity)} ${item?.unit || "pcs"}`;
+  }).join("\n");
 }
 
-// Global filter state change tab handler
 document.querySelectorAll("[data-status-filter]").forEach((pill) => {
   pill.addEventListener("click", () => {
     if(el.pillActive) el.pillActive.classList.toggle("active", pill.id === "pillActive");
     if(el.pillCompleted) el.pillCompleted.classList.toggle("active", pill.id === "pillCompleted");
     currentStatusFilter = pill.dataset.statusFilter;
-    resetMasterSelection();
-    resetDeepSelection();
+    resetMasterSelection(); resetDeepSelection();
     if (el.deepView) el.deepView.style.display = "none";
     if (el.masterView) el.masterView.style.display = "block";
     renderBifurcatedOrders();
   });
 });
 
-function getFormattedDate() {
-  return new Date().toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  });
-}
-
-// Formats any date value (a Supabase timestamp like "2026-06-21T08:30:00+00:00",
-// or an already-nice string like "21 Jun 2026") into a clean date-only display.
+function getFormattedDate() { return new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); }
 function formatDisplayDate(value) {
   if (!value) return getFormattedDate();
   const parsed = new Date(value);
   if (isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  });
+  return parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function normalizeStockItem(item) {
-  return {
-    id: item.id || generateUUID(),
-    name: item.name || "",
-    supplierId: item.supplierId || "",
-    unit: formatUnit(item.unit)
-  };
-}
+function normalizeStockItem(item) { return { id: item.id || generateUUID(), name: item.name || "", supplierId: item.supplierId || "", unit: formatUnit(item.unit) }; }
 
 function render() {
   renderSupplierOptions();
@@ -605,44 +347,26 @@ function render() {
   renderBifurcatedOrders();
 }
 
-// ---------- Header selection bar (WhatsApp-style delete) ----------
-// When a long-press starts a selection (stock table, order register, order line items,
-// or a supplier row), the header title is replaced by a count/name, an edit icon (only
-// when exactly one item is selected), and a delete icon — instead of inline buttons in
-// the page content. The header buttons proxy-click whichever underlying (now visually
-// hidden) bulk-delete controls are active, so existing confirm/delete logic keeps working.
-let activeHeaderSelectionContext = null; // "stock" | "master" | "deep" | "supplier" | null
-
+let activeHeaderSelectionContext = null; 
 function showHeaderSelection(context) {
   activeHeaderSelectionContext = context;
   if (el.headerTitleView) el.headerTitleView.style.display = "none";
   if (el.headerSelectionBar) el.headerSelectionBar.style.display = "flex";
 }
-
 function hideHeaderSelection() {
   activeHeaderSelectionContext = null;
   if (el.headerTitleView) el.headerTitleView.style.display = "flex";
   if (el.headerSelectionBar) el.headerSelectionBar.style.display = "none";
-  hideHeaderSelectionEditBtn();
-  resetSupplierSelectionState();
+  hideHeaderSelectionEditBtn(); resetSupplierSelectionState();
 }
-
-function setHeaderSelectionCount(text) {
-  if (el.headerSelectionCount) el.headerSelectionCount.textContent = text;
-}
-
-// Edit only makes sense for exactly one selected item — shown for stock (when exactly
-// one row is checked) and always for supplier (which is single-select by design).
+function setHeaderSelectionCount(text) { if (el.headerSelectionCount) el.headerSelectionCount.textContent = text; }
 function showHeaderSelectionEditBtn(id) {
   if (!el.headerSelectionEditBtn) return;
-  el.headerSelectionEditBtn.style.display = "inline-flex";
-  el.headerSelectionEditBtn.dataset.editId = id;
+  el.headerSelectionEditBtn.style.display = "inline-flex"; el.headerSelectionEditBtn.dataset.editId = id;
 }
-
 function hideHeaderSelectionEditBtn() {
   if (!el.headerSelectionEditBtn) return;
-  el.headerSelectionEditBtn.style.display = "none";
-  delete el.headerSelectionEditBtn.dataset.editId;
+  el.headerSelectionEditBtn.style.display = "none"; delete el.headerSelectionEditBtn.dataset.editId;
 }
 
 if (el.headerSelectionCancelBtn) {
@@ -654,21 +378,13 @@ if (el.headerSelectionCancelBtn) {
     hideHeaderSelection();
   });
 }
-
 if (el.headerSelectionEditBtn) {
   el.headerSelectionEditBtn.addEventListener("click", () => {
-    const id = el.headerSelectionEditBtn.dataset.editId;
-    if (!id) return;
-    if (activeHeaderSelectionContext === "stock") {
-      const item = state.stocks.find((s) => s.id === id);
-      if (item) openEditStockModal(item);
-    } else if (activeHeaderSelectionContext === "supplier") {
-      const supplier = state.suppliers.find((s) => s.id === id);
-      if (supplier) openEditSupplierModal(supplier);
-    }
+    const id = el.headerSelectionEditBtn.dataset.editId; if (!id) return;
+    if (activeHeaderSelectionContext === "stock") { const item = state.stocks.find((s) => s.id === id); if (item) openEditStockModal(item); }
+    else if (activeHeaderSelectionContext === "supplier") { const supplier = state.suppliers.find((s) => s.id === id); if (supplier) openEditSupplierModal(supplier); }
   });
 }
-
 if (el.headerSelectionDeleteBtn) {
   el.headerSelectionDeleteBtn.addEventListener("click", () => {
     if (activeHeaderSelectionContext === "stock" && el.stockBulkDeleteExecuteBtn) el.stockBulkDeleteExecuteBtn.click();
@@ -691,42 +407,33 @@ function showPage(pageId, fromPopState = false) {
     button.setAttribute("aria-current", isActive ? "page" : "false");
   });
 
-  // Leaving a page always cancels any in-progress selection, in every
-  // context — otherwise switching tabs mid-selection and coming back left
-  // rows/cards still marked selected.
   hideHeaderSelection();
   hideStockBulkDeleteBar();
   resetMasterSelection();
   resetDeepSelection();
 
-  if (pageId === "orderDetailsPage") {
-    if (el.deepView) el.deepView.style.display = "none";
-    if (el.masterView) el.masterView.style.display = "block";
-    
-    renderBifurcatedOrders();
-  }
+  // Hide any open deep views to ensure a clean slate
+  if (el.deepView) el.deepView.style.display = "none";
+  if (el.masterView) el.masterView.style.display = "block";
+  focusedSupplierDetailId = null;
+  if (el.supplierStockDetailView) el.supplierStockDetailView.style.display = "none";
+  if (el.supplierMasterView) el.supplierMasterView.style.display = "block";
 
-  // Reset the supplier master/detail split view whenever navigating away from it
-  if (pageId !== "supplierPage") {
-    closeSupplierStockDetail();
-  }
+  if (pageId === "orderDetailsPage") renderBifurcatedOrders();
 
-  // Only push state if the navigation didn't come from a back swipe
-  if (!fromPopState && location.hash !== `#${pageId}`) {
+  // Route updates (use replaceState so tab tapping doesn't clutter history,
+  // and removes "-detail" safely if a deep view was abandoned via a tab click)
+  if (!fromPopState) {
     history.replaceState(null, "", `#${pageId}`);
   }
 }
 
-function renderSupplierOptions() {
-  // Supplier filter is now a text search box — nothing to render here.
-  // The suggestions box is populated on demand by handleSupplierFilterSearch().
-}
+function renderSupplierOptions() { }
 
 function renderStockTable() {
   if (!el.stockTable || !el.stockSearch || !el.supplierFilter) return;
   const query = el.stockSearch.value.trim().toLowerCase();
   const supplierQuery = el.supplierFilter.value.trim().toLowerCase();
-
   const visibleStocks = state.stocks.filter((item) => {
     const sName = supplierName(item.supplierId).toLowerCase();
     const matchesQuery = [item.name, sName].join(" ").toLowerCase().includes(query);
@@ -738,119 +445,67 @@ function renderStockTable() {
     el.stockTable.innerHTML = `<tr><td colspan="3" class="empty">No stock items found.</td></tr>`;
     return;
   }
-
-  el.stockTable.innerHTML = visibleStocks
-    .map((item) => `
+  el.stockTable.innerHTML = visibleStocks.map((item) => `
       <tr class="stock-table-row" data-item-id="${item.id}" style="cursor: pointer; user-select: none; -webkit-user-select: none;">
-        <td data-label="Item">
-          <div class="item-name">${escapeHtml(item.name)}</div>
-        </td>
+        <td data-label="Item"><div class="item-name">${escapeHtml(item.name)}</div></td>
         <td data-label="Supplier">${escapeHtml(supplierName(item.supplierId))}</td>
         <td data-label="Unit">${escapeHtml(item.unit || "pcs")}</td>
       </tr>
     `).join("");
-
   setupStockTableLongPress();
 }
 
-// ---------- Stock table tap-and-hold delete ----------
 let stockTableLongPressTimer = null;
 let stockTableSelectionActive = false;
 let stockSelectedIds = new Set();
-
 function setupStockTableLongPress() {
   el.stockTable.querySelectorAll(".stock-table-row").forEach((row) => {
     const onLongPress = () => {
-      stockTableSelectionActive = true;
-      showStockBulkDeleteBar();
-      stockSelectedIds.add(row.dataset.itemId);
-      row.classList.add("row-selected");
-      updateStockBulkDeleteBar();
+      stockTableSelectionActive = true; showStockBulkDeleteBar(); stockSelectedIds.add(row.dataset.itemId);
+      row.classList.add("row-selected"); updateStockBulkDeleteBar();
       if (navigator.vibrate) navigator.vibrate(50);
     };
-
     let touchStartX = 0, touchStartY = 0;
-
-    row.addEventListener("mousedown", (e) => {
-      if (e.target.closest("button")) return;
-      stockTableLongPressTimer = setTimeout(onLongPress, 600);
-    });
+    row.addEventListener("mousedown", (e) => { if (e.target.closest("button")) return; stockTableLongPressTimer = setTimeout(onLongPress, 600); });
     row.addEventListener("touchstart", (e) => {
       if (e.target.closest("button")) return;
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-      stockTableLongPressTimer = setTimeout(onLongPress, 600);
+      touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; stockTableLongPressTimer = setTimeout(onLongPress, 600);
     }, { passive: true });
     row.addEventListener("touchmove", (e) => {
-      const dx = Math.abs(e.touches[0].clientX - touchStartX);
-      const dy = Math.abs(e.touches[0].clientY - touchStartY);
+      const dx = Math.abs(e.touches[0].clientX - touchStartX); const dy = Math.abs(e.touches[0].clientY - touchStartY);
       if (dx > 8 || dy > 8) clearTimeout(stockTableLongPressTimer);
     }, { passive: true });
     row.addEventListener("mouseup", () => clearTimeout(stockTableLongPressTimer));
     row.addEventListener("touchend", () => clearTimeout(stockTableLongPressTimer));
     row.addEventListener("touchcancel", () => clearTimeout(stockTableLongPressTimer));
     row.addEventListener("mouseleave", () => clearTimeout(stockTableLongPressTimer));
-
     row.addEventListener("click", (e) => {
       if (e.target.closest("button")) return;
       if (stockTableSelectionActive) {
-        // in selection mode, tap toggles this row's highlight
         const id = row.dataset.itemId;
-        if (stockSelectedIds.has(id)) {
-          stockSelectedIds.delete(id);
-          row.classList.remove("row-selected");
-        } else {
-          stockSelectedIds.add(id);
-          row.classList.add("row-selected");
-        }
-        updateStockBulkDeleteBar();
-        return;
+        if (stockSelectedIds.has(id)) { stockSelectedIds.delete(id); row.classList.remove("row-selected"); } 
+        else { stockSelectedIds.add(id); row.classList.add("row-selected"); }
+        updateStockBulkDeleteBar(); return;
       }
-      // single tap in normal mode: no action (ordering is done from the Order List page)
     });
   });
 }
 
-function showStockBulkDeleteBar() {
-  if (!el.stockBulkDeleteBar) return;
-  el.stockBulkDeleteBar.style.display = "flex";
-  showHeaderSelection("stock");
-}
-
+function showStockBulkDeleteBar() { if (!el.stockBulkDeleteBar) return; el.stockBulkDeleteBar.style.display = "flex"; showHeaderSelection("stock"); }
 function hideStockBulkDeleteBar() {
-  stockTableSelectionActive = false;
-  stockSelectedIds.clear();
-  if (el.stockTable) {
-    el.stockTable.querySelectorAll(".stock-table-row.row-selected").forEach((r) => r.classList.remove("row-selected"));
-  }
-  if (!el.stockBulkDeleteBar) return;
-  el.stockBulkDeleteBar.style.display = "none";
+  stockTableSelectionActive = false; stockSelectedIds.clear();
+  if (el.stockTable) el.stockTable.querySelectorAll(".stock-table-row.row-selected").forEach((r) => r.classList.remove("row-selected"));
+  if (!el.stockBulkDeleteBar) return; el.stockBulkDeleteBar.style.display = "none";
   if (el.stockBulkDeleteCount) el.stockBulkDeleteCount.textContent = "0 selected";
   hideHeaderSelection();
 }
-
 function updateStockBulkDeleteBar() {
-  const checked = stockSelectedIds.size;
-  const countText = `${checked} selected`;
-  if (el.stockBulkDeleteCount) el.stockBulkDeleteCount.textContent = countText;
-  setHeaderSelectionCount(countText);
-
-  if (checked === 0) {
-    // Nothing left selected — exit selection mode entirely, same as
-    // tapping Cancel, so the row highlight never lingers.
-    hideStockBulkDeleteBar();
-    return;
-  }
-
-  if (checked === 1) {
-    showHeaderSelectionEditBtn([...stockSelectedIds][0]);
-  } else {
-    hideHeaderSelectionEditBtn();
-  }
+  const checked = stockSelectedIds.size; const countText = `${checked} selected`;
+  if (el.stockBulkDeleteCount) el.stockBulkDeleteCount.textContent = countText; setHeaderSelectionCount(countText);
+  if (checked === 0) { hideStockBulkDeleteBar(); return; }
+  if (checked === 1) showHeaderSelectionEditBtn([...stockSelectedIds][0]); else hideHeaderSelectionEditBtn();
 }
 
-
-let expandedSupplierId = null; // kept for backwards compatibility, no longer used for expansion
 let focusedSupplierDetailId = null;
 
 function openSupplierStockDetail(supplierId) {
@@ -858,38 +513,27 @@ function openSupplierStockDetail(supplierId) {
   const supplier = state.suppliers.find(s => s.id === supplierId);
   if (!supplier) return;
 
-  // Push history state so the Android back button can intercept it
-  history.pushState({ isDeepView: true }, "");
+  // History API - Register the overlay in the back stack
+  history.pushState(null, "", location.hash + "-detail");
 
   if (el.supplierMasterView) el.supplierMasterView.style.display = "none";
   if (el.supplierStockDetailView) el.supplierStockDetailView.style.display = "block";
-
   if (el.supplierStockDetailName) el.supplierStockDetailName.textContent = supplier.name;
   if (el.supplierStockDetailContact) {
     const contact = [supplier.phone, supplier.email].filter(Boolean).join(" · ");
     el.supplierStockDetailContact.textContent = contact || "No contact info";
   }
-
   renderSupplierStockDetail();
 }
 
 function renderSupplierStockDetail() {
   if (!el.supplierStockDetailList || !focusedSupplierDetailId) return;
-  const items = state.stocks
-    .filter(s => s.supplierId === focusedSupplierDetailId)
-    .sort((a, b) => a.name.localeCompare(b.name));
-
+  const items = state.stocks.filter(s => s.supplierId === focusedSupplierDetailId).sort((a, b) => a.name.localeCompare(b.name));
   if (!items.length) {
-    el.supplierStockDetailList.innerHTML = `<div class="empty">No stock items linked to this supplier yet.<br>Go to Order List and tap the + button to add some.</div>`;
-    return;
+    el.supplierStockDetailList.innerHTML = `<div class="empty">No stock items linked to this supplier yet.<br>Go to Order List and tap the + button to add some.</div>`; return;
   }
-
   el.supplierStockDetailList.innerHTML = items.map(item => `
-    <div class="supplier-stock-item" data-item-id="${item.id}" style="
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
-      background: #fff; margin-bottom: 6px; cursor: pointer;
-      user-select: none; -webkit-user-select: none; overflow: hidden;">
+    <div class="supplier-stock-item" data-item-id="${item.id}" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; margin-bottom: 6px; cursor: pointer; user-select: none; -webkit-user-select: none; overflow: hidden;">
       <div style="flex: 1 1 0; min-width: 0;">
         <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.95rem;">${escapeHtml(item.name)}</strong>
         <span style="font-size: 0.8rem; color: var(--muted);">${escapeHtml(item.unit || "pcs")}</span>
@@ -907,358 +551,155 @@ function closeSupplierStockDetail() {
 
 function renderSupplierList() {
   if (!el.supplierList) return;
-
-  // Any re-render invalidates row references — reset any in-progress selection
-  if (activeHeaderSelectionContext === "supplier") hideHeaderSelection();
-  else resetSupplierSelectionState();
-
-  if (!state.suppliers.length) {
-    el.supplierList.innerHTML = `<div class="empty">No suppliers yet. Go to Order List and tap the + button to add one.</div>`;
-    return;
-  }
+  if (activeHeaderSelectionContext === "supplier") hideHeaderSelection(); else resetSupplierSelectionState();
+  if (!state.suppliers.length) { el.supplierList.innerHTML = `<div class="empty">No suppliers yet. Go to Order List and tap the + button to add one.</div>`; return; }
 
   const query = (el.supplierSearchInput?.value || "").trim().toLowerCase();
-  const visibleSuppliers = (query
-    ? state.suppliers.filter((supplier) => supplier.name.toLowerCase().includes(query))
-    : [...state.suppliers]
-  ).sort((a, b) => a.name.localeCompare(b.name));
+  const visibleSuppliers = (query ? state.suppliers.filter((supplier) => supplier.name.toLowerCase().includes(query)) : [...state.suppliers]).sort((a, b) => a.name.localeCompare(b.name));
 
-  if (!visibleSuppliers.length) {
-    el.supplierList.innerHTML = `<div class="empty">No suppliers match your search.</div>`;
-    return;
-  }
+  if (!visibleSuppliers.length) { el.supplierList.innerHTML = `<div class="empty">No suppliers match your search.</div>`; return; }
 
-  el.supplierList.innerHTML = visibleSuppliers
-    .map((supplier) => {
-      return `
-        <div class="supplier-card-row" data-supplier-id="${supplier.id}" style="
-          display: flex; align-items: center; gap: 10px;
-          border: 1px solid var(--line); border-radius: 8px;
-          padding: 12px 14px; background: #fff; margin-bottom: 6px;
-          cursor: pointer; user-select: none; -webkit-user-select: none; overflow: hidden;">
+  el.supplierList.innerHTML = visibleSuppliers.map((supplier) => `
+        <div class="supplier-card-row" data-supplier-id="${supplier.id}" style="display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: #fff; margin-bottom: 6px; cursor: pointer; user-select: none; -webkit-user-select: none; overflow: hidden;">
           <div style="flex: 1 1 0; min-width: 0; overflow: hidden;">
             <strong style="font-size: 1rem; display: block; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(supplier.name)}</strong>
-            <div style="font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-              ${supplier.phone ? escapeHtml(supplier.phone) : (supplier.email ? escapeHtml(supplier.email) : "No contact info")}
-            </div>
+            <div style="font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${supplier.phone ? escapeHtml(supplier.phone) : (supplier.email ? escapeHtml(supplier.email) : "No contact info")}</div>
           </div>
-          <div style="flex-shrink: 0; display: flex; align-items: center; gap: 6px;">
-              <span style="color: var(--primary); font-size: 1.2rem; line-height: 1; padding-left: 4px;">›</span>
-            </div>
+          <div style="flex-shrink: 0; display: flex; align-items: center; gap: 6px;"><span style="color: var(--primary); font-size: 1.2rem; line-height: 1; padding-left: 4px;">›</span></div>
         </div>
-      `;
-    }).join("");
-
+      `).join("");
   setupSupplierLongPressTriggers();
 }
 
 function handleSearchInput() {
   if (!el.orderItemSearchInput || !el.searchSuggestionsBox) return;
   const query = el.orderItemSearchInput.value.trim().toLowerCase();
+  const matches = (query ? state.stocks.filter((item) => item.name.toLowerCase().includes(query) || supplierName(item.supplierId).toLowerCase().includes(query)) : [...state.stocks]).sort((a, b) => a.name.localeCompare(b.name));
 
-  const matches = (query
-    ? state.stocks.filter((item) =>
-        item.name.toLowerCase().includes(query) ||
-        supplierName(item.supplierId).toLowerCase().includes(query)
-      )
-    : [...state.stocks]
-  ).sort((a, b) => a.name.localeCompare(b.name));
+  if (!state.stocks.length) { el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No stock items added yet. Tap the + button to add one.</div>`; el.searchSuggestionsBox.style.display = "block"; return; }
+  if (!matches.length) { el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No items match "${escapeHtml(query)}"</div>`; el.searchSuggestionsBox.style.display = "block"; return; }
 
-  if (!state.stocks.length) {
-    el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No stock items added yet. Tap the + button to add one.</div>`;
-    el.searchSuggestionsBox.style.display = "block";
-    return;
-  }
-
-  if (!matches.length) {
-    el.searchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No items match "${escapeHtml(query)}"</div>`;
-    el.searchSuggestionsBox.style.display = "block";
-    return;
-  }
-
-  el.searchSuggestionsBox.innerHTML = matches
-    .map((item) => `
+  el.searchSuggestionsBox.innerHTML = matches.map((item) => `
       <div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}">
-        <strong>${escapeHtml(item.name)}</strong>
-        <span class="vendor-tag">${escapeHtml(supplierName(item.supplierId))}</span>
+        <strong>${escapeHtml(item.name)}</strong><span class="vendor-tag">${escapeHtml(supplierName(item.supplierId))}</span>
       </div>
     `).join("");
   el.searchSuggestionsBox.style.display = "block";
 }
 
-// ---------- Supplier row tap-and-hold selection (multi-select, same pattern
-// as the Stock table) ----------
-// Long-pressing a row starts selection mode and selects that row; further
-// taps toggle other rows in/out. Exactly one selected shows Edit + Delete in
-// the header; more than one shows Delete only.
 let supplierLongPressTimer = null;
 let supplierSelectionActive = false;
 let supplierSelectedIds = new Set();
-
 function setupSupplierLongPressTriggers() {
   if (!el.supplierList) return;
   el.supplierList.querySelectorAll(".supplier-card-row").forEach((row) => {
-    row.addEventListener("mousedown", (e) => startSupplierLongPress(e, row));
-    row.addEventListener("mouseup", cancelSupplierLongPress);
-    row.addEventListener("mouseleave", cancelSupplierLongPress);
-
+    row.addEventListener("mousedown", (e) => startSupplierLongPress(e, row)); row.addEventListener("mouseup", cancelSupplierLongPress); row.addEventListener("mouseleave", cancelSupplierLongPress);
     let supplierTouchStartX = 0, supplierTouchStartY = 0;
-    row.addEventListener("touchstart", (e) => {
-      supplierTouchStartX = e.touches[0].clientX;
-      supplierTouchStartY = e.touches[0].clientY;
-      startSupplierLongPress(e, row);
-    }, { passive: true });
-    row.addEventListener("touchmove", (e) => {
-      const dx = Math.abs(e.touches[0].clientX - supplierTouchStartX);
-      const dy = Math.abs(e.touches[0].clientY - supplierTouchStartY);
-      if (dx > 8 || dy > 8) cancelSupplierLongPress();
-    }, { passive: true });
-    row.addEventListener("touchend", cancelSupplierLongPress);
-    row.addEventListener("touchcancel", cancelSupplierLongPress);
+    row.addEventListener("touchstart", (e) => { supplierTouchStartX = e.touches[0].clientX; supplierTouchStartY = e.touches[0].clientY; startSupplierLongPress(e, row); }, { passive: true });
+    row.addEventListener("touchmove", (e) => { const dx = Math.abs(e.touches[0].clientX - supplierTouchStartX); const dy = Math.abs(e.touches[0].clientY - supplierTouchStartY); if (dx > 8 || dy > 8) cancelSupplierLongPress(); }, { passive: true });
+    row.addEventListener("touchend", cancelSupplierLongPress); row.addEventListener("touchcancel", cancelSupplierLongPress);
   });
 }
-
 function startSupplierLongPress(e, row) {
-  cancelSupplierLongPress(); // clear any stale/overlapping timer first
-  isLongPressTriggered = false;
+  cancelSupplierLongPress(); isLongPressTriggered = false;
   supplierLongPressTimer = setTimeout(() => {
-    isLongPressTriggered = true;
-    supplierSelectionActive = true;
-    supplierSelectedIds.add(row.dataset.supplierId);
-    row.classList.add("row-selected");
-    updateSupplierHeaderSelection();
-    if (navigator.vibrate) navigator.vibrate(50);
+    isLongPressTriggered = true; supplierSelectionActive = true; supplierSelectedIds.add(row.dataset.supplierId); row.classList.add("row-selected");
+    updateSupplierHeaderSelection(); if (navigator.vibrate) navigator.vibrate(50);
   }, LONG_PRESS_DURATION);
 }
-
-function cancelSupplierLongPress() {
-  if (supplierLongPressTimer) clearTimeout(supplierLongPressTimer);
-}
+function cancelSupplierLongPress() { if (supplierLongPressTimer) clearTimeout(supplierLongPressTimer); }
 
 function updateSupplierHeaderSelection() {
   const count = supplierSelectedIds.size;
-
-  if (count === 0) {
-    clearSupplierHeaderSelection();
-    return;
-  }
-
+  if (count === 0) { clearSupplierHeaderSelection(); return; }
   showHeaderSelection("supplier");
-  if (count === 1) {
-    const supplier = state.suppliers.find((s) => s.id === [...supplierSelectedIds][0]);
-    setHeaderSelectionCount(supplier ? supplier.name : "1 selected");
-    showHeaderSelectionEditBtn([...supplierSelectedIds][0]);
-  } else {
-    setHeaderSelectionCount(`${count} suppliers selected`);
-    hideHeaderSelectionEditBtn();
-  }
+  if (count === 1) { const supplier = state.suppliers.find((s) => s.id === [...supplierSelectedIds][0]); setHeaderSelectionCount(supplier ? supplier.name : "1 selected"); showHeaderSelectionEditBtn([...supplierSelectedIds][0]); } 
+  else { setHeaderSelectionCount(`${count} suppliers selected`); hideHeaderSelectionEditBtn(); }
 }
-
 function resetSupplierSelectionState() {
-  supplierSelectionActive = false;
-  supplierSelectedIds.clear();
-  if (el.supplierList) {
-    el.supplierList.querySelectorAll(".supplier-card-row.row-selected").forEach((r) => r.classList.remove("row-selected"));
-  }
+  supplierSelectionActive = false; supplierSelectedIds.clear();
+  if (el.supplierList) el.supplierList.querySelectorAll(".supplier-card-row.row-selected").forEach((r) => r.classList.remove("row-selected"));
 }
-
-function clearSupplierHeaderSelection() {
-  resetSupplierSelectionState();
-  hideHeaderSelection();
-}
+function clearSupplierHeaderSelection() { resetSupplierSelectionState(); hideHeaderSelection(); }
 
 async function requestDeleteSuppliers(ids) {
   if (!ids.length) return;
-
-  const blocked = []; // suppliers with items present in orders
-  const needsStockCleanup = []; // suppliers with stock items but no orders
-  const deletable = [];
-
+  const blocked = []; const needsStockCleanup = []; const deletable = [];
   ids.forEach((id) => {
-    const supplier = state.suppliers.find((s) => s.id === id);
-    if (!supplier) return;
+    const supplier = state.suppliers.find((s) => s.id === id); if (!supplier) return;
     const supplierStockIds = state.stocks.filter((s) => s.supplierId === id).map((s) => s.id);
     const inOrders = supplierStockIds.some((stockId) => state.order.some((line) => line.itemId === stockId));
-
-    if (inOrders) blocked.push(supplier.name);
-    else if (supplierStockIds.length) needsStockCleanup.push(supplier.name);
-    else deletable.push(id);
+    if (inOrders) blocked.push(supplier.name); else if (supplierStockIds.length) needsStockCleanup.push(supplier.name); else deletable.push(id);
   });
 
   if (blocked.length || needsStockCleanup.length) {
     const parts = [];
-    if (blocked.length) {
-      parts.push(`${blocked.join(", ")} — still ${blocked.length === 1 ? "has" : "have"} stock items present in your Active or Completed orders. Remove ${blocked.length === 1 ? "it" : "them"} from your orders first.`);
-    }
-    if (needsStockCleanup.length) {
-      parts.push(`${needsStockCleanup.join(", ")} — still ${needsStockCleanup.length === 1 ? "has" : "have"} stock items linked. Delete ${needsStockCleanup.length === 1 ? "that item" : "those items"} from Stock Details first.`);
-    }
-    const deletableNote = deletable.length
-      ? `\n\n${deletable.length} of your selected supplier${deletable.length === 1 ? "" : "s"} can be deleted now — the rest cannot yet:\n\n`
-      : "\n\nNone of the selected suppliers can be deleted yet:\n\n";
-
-    await showConfirm(
-      "Some Suppliers Can't Be Deleted",
-      deletableNote + parts.join("\n\n"),
-      "OK",
-      false
-    );
-
+    if (blocked.length) parts.push(`${blocked.join(", ")} — still ${blocked.length === 1 ? "has" : "have"} stock items present in your Active or Completed orders. Remove ${blocked.length === 1 ? "it" : "them"} from your orders first.`);
+    if (needsStockCleanup.length) parts.push(`${needsStockCleanup.join(", ")} — still ${needsStockCleanup.length === 1 ? "has" : "have"} stock items linked. Delete ${needsStockCleanup.length === 1 ? "that item" : "those items"} from Stock Details first.`);
+    const deletableNote = deletable.length ? `\n\n${deletable.length} of your selected supplier${deletable.length === 1 ? "" : "s"} can be deleted now — the rest cannot yet:\n\n` : "\n\nNone of the selected suppliers can be deleted yet:\n\n";
+    await showConfirm("Some Suppliers Can't Be Deleted", deletableNote + parts.join("\n\n"), "OK", false);
     if (!deletable.length) return;
-    if (!await showConfirm(
-      "Delete Supplier" + (deletable.length === 1 ? "" : "s"),
-      `Delete ${deletable.length} supplier${deletable.length === 1 ? "" : "s"} that ${deletable.length === 1 ? "has" : "have"} no linked stock items? This cannot be undone.`
-    )) return;
+    if (!await showConfirm("Delete Supplier" + (deletable.length === 1 ? "" : "s"), `Delete ${deletable.length} supplier${deletable.length === 1 ? "" : "s"} that ${deletable.length === 1 ? "has" : "have"} no linked stock items? This cannot be undone.`)) return;
   } else {
-    if (!await showConfirm(
-      "Delete Supplier" + (deletable.length === 1 ? "" : "s"),
-      deletable.length === 1
-        ? `Delete "${state.suppliers.find((s) => s.id === deletable[0])?.name}"? This cannot be undone.`
-        : `Delete ${deletable.length} selected suppliers? This cannot be undone.`
-    )) return;
+    if (!await showConfirm("Delete Supplier" + (deletable.length === 1 ? "" : "s"), deletable.length === 1 ? `Delete "${state.suppliers.find((s) => s.id === deletable[0])?.name}"? This cannot be undone.` : `Delete ${deletable.length} selected suppliers? This cannot be undone.`)) return;
   }
-
   state.suppliers = state.suppliers.filter((s) => !deletable.includes(s.id));
-  saveState();
-  syncToSupabase("suppliers", "delete", { ids: deletable });
-  clearSupplierHeaderSelection();
-  render();
+  saveState(); syncToSupabase("suppliers", "delete", { ids: deletable }); clearSupplierHeaderSelection(); render();
 }
 
 if (el.supplierList) {
   el.supplierList.addEventListener("click", (event) => {
-    if (isLongPressTriggered) {
-      isLongPressTriggered = false;
-      return;
-    }
-
-    const row = event.target.closest(".supplier-card-row");
-    if (!row) return;
-
+    if (isLongPressTriggered) { isLongPressTriggered = false; return; }
+    const row = event.target.closest(".supplier-card-row"); if (!row) return;
     if (supplierSelectionActive) {
       const id = row.dataset.supplierId;
-      if (supplierSelectedIds.has(id)) {
-        supplierSelectedIds.delete(id);
-        row.classList.remove("row-selected");
-      } else {
-        supplierSelectedIds.add(id);
-        row.classList.add("row-selected");
-      }
-      updateSupplierHeaderSelection();
-      return;
+      if (supplierSelectedIds.has(id)) { supplierSelectedIds.delete(id); row.classList.remove("row-selected"); } 
+      else { supplierSelectedIds.add(id); row.classList.add("row-selected"); }
+      updateSupplierHeaderSelection(); return;
     }
-
     openSupplierStockDetail(row.dataset.supplierId);
   });
 }
 
-// History API link for the back button
+// Intercepts the back button so it handles native back gesture safely
 if (el.supplierStockBackBtn) {
-  el.supplierStockBackBtn.addEventListener("click", () => {
-    history.back();
-  });
+  el.supplierStockBackBtn.addEventListener("click", () => history.back());
 }
 
 if (el.supplierStockDetailList) {
   el.supplierStockDetailList.addEventListener("click", (event) => {
-    const item = event.target.closest(".supplier-stock-item");
-    if (!item) return;
-    const stock = state.stocks.find(s => s.id === item.dataset.itemId);
-    if (stock) openAddToOrderModal(stock);
+    const item = event.target.closest(".supplier-stock-item"); if (!item) return;
+    const stock = state.stocks.find(s => s.id === item.dataset.itemId); if (stock) openAddToOrderModal(stock);
   });
 }
 
 function handleStockSupplierSearch() {
   if (!el.stockSupplierSearchInput || !el.supplierSuggestionsBox) return;
   const query = el.stockSupplierSearchInput.value.trim().toLowerCase();
-
-  const matches = (query
-    ? state.suppliers.filter((supplier) => supplier.name.toLowerCase().includes(query))
-    : [...state.suppliers]
-  ).sort((a, b) => a.name.localeCompare(b.name));
-
-  if (!state.suppliers.length) {
-    el.supplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers added yet. Go to Supplier Details to add one.</div>`;
-    el.supplierSuggestionsBox.style.display = "block";
-    return;
-  }
-
-  if (!matches.length) {
-    el.supplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers match "${escapeHtml(query)}"</div>`;
-    el.supplierSuggestionsBox.style.display = "block";
-    return;
-  }
-
-  el.supplierSuggestionsBox.innerHTML = matches
-    .map((supplier) => `
-      <div class="supplier-suggestion-item suggestion-item" data-id="${supplier.id}" data-name="${escapeHtml(supplier.name)}">
-        <strong>${escapeHtml(supplier.name)}</strong>
-      </div>
-    `).join("");
+  const matches = (query ? state.suppliers.filter((supplier) => supplier.name.toLowerCase().includes(query)) : [...state.suppliers]).sort((a, b) => a.name.localeCompare(b.name));
+  if (!state.suppliers.length) { el.supplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers added yet. Go to Supplier Details to add one.</div>`; el.supplierSuggestionsBox.style.display = "block"; return; }
+  if (!matches.length) { el.supplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers match "${escapeHtml(query)}"</div>`; el.supplierSuggestionsBox.style.display = "block"; return; }
+  el.supplierSuggestionsBox.innerHTML = matches.map((supplier) => `<div class="supplier-suggestion-item suggestion-item" data-id="${supplier.id}" data-name="${escapeHtml(supplier.name)}"><strong>${escapeHtml(supplier.name)}</strong></div>`).join("");
   el.supplierSuggestionsBox.style.display = "block";
 }
 
 function handleSupplierListSearch() {
   if (!el.supplierSearchInput || !el.supplierSearchSuggestionsBox) return;
   const query = el.supplierSearchInput.value.trim().toLowerCase();
-
-  const matches = (query
-    ? state.suppliers.filter(s => s.name.toLowerCase().includes(query))
-    : [...state.suppliers]
-  ).sort((a, b) => a.name.localeCompare(b.name));
-
-  if (!state.suppliers.length) {
-    el.supplierSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers added yet.</div>`;
-    el.supplierSearchSuggestionsBox.style.display = "block";
-    return;
-  }
-
-  if (!matches.length) {
-    el.supplierSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers match "${escapeHtml(query)}"</div>`;
-    el.supplierSearchSuggestionsBox.style.display = "block";
-    return;
-  }
-
-  el.supplierSearchSuggestionsBox.innerHTML = matches
-    .map((supplier) => `
-      <div class="suggestion-item" data-id="${supplier.id}" data-name="${escapeHtml(supplier.name)}">
-        <strong>${escapeHtml(supplier.name)}</strong>
-      </div>
-    `).join("");
+  const matches = (query ? state.suppliers.filter(s => s.name.toLowerCase().includes(query)) : [...state.suppliers]).sort((a, b) => a.name.localeCompare(b.name));
+  if (!state.suppliers.length) { el.supplierSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers added yet.</div>`; el.supplierSearchSuggestionsBox.style.display = "block"; return; }
+  if (!matches.length) { el.supplierSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers match "${escapeHtml(query)}"</div>`; el.supplierSearchSuggestionsBox.style.display = "block"; return; }
+  el.supplierSearchSuggestionsBox.innerHTML = matches.map((supplier) => `<div class="suggestion-item" data-id="${supplier.id}" data-name="${escapeHtml(supplier.name)}"><strong>${escapeHtml(supplier.name)}</strong></div>`).join("");
   el.supplierSearchSuggestionsBox.style.display = "block";
 }
 
 function handleStockSearchInput() {
   if (!el.stockSearch || !el.stockSearchSuggestionsBox) return;
   const query = el.stockSearch.value.trim().toLowerCase();
-
-  const matches = (query
-    ? state.stocks.filter((item) =>
-        item.name.toLowerCase().includes(query) ||
-        supplierName(item.supplierId).toLowerCase().includes(query)
-      )
-    : [...state.stocks]
-  ).sort((a, b) => a.name.localeCompare(b.name));
-
-  if (!state.stocks.length) {
-    el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No stock items added yet.</div>`;
-    el.stockSearchSuggestionsBox.style.display = "block";
-    return;
-  }
-
-  if (!matches.length) {
-    el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No items match "${escapeHtml(query)}"</div>`;
-    el.stockSearchSuggestionsBox.style.display = "block";
-    return;
-  }
-
-  el.stockSearchSuggestionsBox.innerHTML = matches
-    .map((item) => `
-      <div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}">
-        <strong>${escapeHtml(item.name)}</strong>
-        <span class="vendor-tag">${escapeHtml(supplierName(item.supplierId))}</span>
-      </div>
-    `).join("");
+  const matches = (query ? state.stocks.filter((item) => item.name.toLowerCase().includes(query) || supplierName(item.supplierId).toLowerCase().includes(query)) : [...state.stocks]).sort((a, b) => a.name.localeCompare(b.name));
+  if (!state.stocks.length) { el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No stock items added yet.</div>`; el.stockSearchSuggestionsBox.style.display = "block"; return; }
+  if (!matches.length) { el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No items match "${escapeHtml(query)}"</div>`; el.stockSearchSuggestionsBox.style.display = "block"; return; }
+  el.stockSearchSuggestionsBox.innerHTML = matches.map((item) => `<div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}"><strong>${escapeHtml(item.name)}</strong><span class="vendor-tag">${escapeHtml(supplierName(item.supplierId))}</span></div>`).join("");
   el.stockSearchSuggestionsBox.style.display = "block";
 }
 
@@ -1266,19 +707,12 @@ function selectQuickOrderItem(item) {
   selectedQuickOrderItem = item;
   if (el.stockSearch) el.stockSearch.value = item.name;
   renderStockTable();
-
   if (el.stockQuickOrderBar) el.stockQuickOrderBar.style.display = "flex";
   if (el.stockQuickOrderItemName) el.stockQuickOrderItemName.textContent = item.name;
   if (el.stockQuickOrderSupplierName) el.stockQuickOrderSupplierName.textContent = supplierName(item.supplierId);
   if (el.stockQuickOrderUnitLabel) el.stockQuickOrderUnitLabel.textContent = item.unit || "pcs";
-
-  if (el.stockQuickOrderQty) {
-    el.stockQuickOrderQty.value = 1;
-    el.stockQuickOrderQty.focus();
-    el.stockQuickOrderQty.select();
-  }
+  if (el.stockQuickOrderQty) { el.stockQuickOrderQty.value = 1; el.stockQuickOrderQty.focus(); el.stockQuickOrderQty.select(); }
 }
-
 function clearQuickOrderBar() {
   selectedQuickOrderItem = null;
   if (el.stockQuickOrderBar) el.stockQuickOrderBar.style.display = "none";
@@ -1287,325 +721,160 @@ function clearQuickOrderBar() {
 
 function renderBifurcatedOrders() {
   if (!el.bifurcatedOrderContainer) return;
-  
   if (el.masterBulkDeleteToolbar) el.masterBulkDeleteToolbar.style.display = "none";
   if (el.masterView) el.masterView.classList.remove("selection-active");
   hideHeaderSelection();
-  
   const targetLines = state.order.filter((line) => (line.status || "active") === currentStatusFilter);
-  
-  if (!targetLines.length) {
-    el.bifurcatedOrderContainer.innerHTML = `<div class="empty">No ${currentStatusFilter} orders currently in register logs.</div>`;
-    return;
-  }
+  if (!targetLines.length) { el.bifurcatedOrderContainer.innerHTML = `<div class="empty">No ${currentStatusFilter} orders currently in register logs.</div>`; return; }
 
   if (currentStatusFilter === "completed") {
-    // Group by supplier + batch, so each separate "send" shows as its own
-    // entry instead of merging into one ongoing bucket per supplier.
     const groups = new Map();
     targetLines.forEach((line) => {
-      const batchKey = line.batchId || "";
-      const groupKey = `${line.supplierId}::${batchKey}`;
-      if (!groups.has(groupKey)) {
-        groups.set(groupKey, { supplierId: line.supplierId, batchId: batchKey, lines: [] });
-      }
+      const batchKey = line.batchId || ""; const groupKey = `${line.supplierId}::${batchKey}`;
+      if (!groups.has(groupKey)) groups.set(groupKey, { supplierId: line.supplierId, batchId: batchKey, lines: [] });
       groups.get(groupKey).lines.push(line);
     });
-
-    // Sort and label by when the order was actually sent (dateCompleted),
-    // not when its items were first added to the active list — a batch can
-    // contain items added on different days, but it's completed as one
-    // action, so it should show that one completion date.
-    const sortedGroups = [...groups.values()].sort((a, b) => {
-      const dateA = new Date(a.lines[0].dateCompleted || a.lines[0].dateCreated || 0).getTime();
-      const dateB = new Date(b.lines[0].dateCompleted || b.lines[0].dateCreated || 0).getTime();
-      return dateB - dateA; // most recent first
-    });
-
-    el.bifurcatedOrderContainer.innerHTML = sortedGroups
-      .map(({ supplierId: sId, batchId, lines }) => {
-        const vendorLabel = supplierName(sId);
-        const dateLabel = formatDisplayDate(lines[0].dateCompleted || lines[0].dateCreated);
-
-        return `
-          <div class="single-line-row" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
-            <div class="vendor-title-wrapper">
-              <div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;">
-                <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
-                <span class="subtle" style="font-size: 0.78rem;">${escapeHtml(dateLabel)}</span>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;">
-              <span class="badge-count">${lines.length} Item${lines.length === 1 ? '' : 's'}</span>
-            </div>
-          </div>
-        `;
-      }).join("");
-
-    setupMasterLongPressTriggers();
-    return;
+    const sortedGroups = [...groups.values()].sort((a, b) => new Date(b.lines[0].dateCompleted || b.lines[0].dateCreated || 0).getTime() - new Date(a.lines[0].dateCompleted || a.lines[0].dateCreated || 0).getTime());
+    el.bifurcatedOrderContainer.innerHTML = sortedGroups.map(({ supplierId: sId, batchId, lines }) => {
+      const vendorLabel = supplierName(sId); const dateLabel = formatDisplayDate(lines[0].dateCompleted || lines[0].dateCreated);
+      return `<div class="single-line-row" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
+          <div class="vendor-title-wrapper"><div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;"><span class="vendor-title">${escapeHtml(vendorLabel)}</span><span class="subtle" style="font-size: 0.78rem;">${escapeHtml(dateLabel)}</span></div></div>
+          <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;"><span class="badge-count">${lines.length} Item${lines.length === 1 ? '' : 's'}</span></div>
+        </div>`;
+    }).join("");
+    setupMasterLongPressTriggers(); return;
   }
 
-  // Active tab: still grouped purely by supplier — items added at different
-  // times stay together as one draft until they're actually sent. Shows the
-  // most recent "added" date as a subtitle, matching the Completed rows'
-  // two-line layout so both lists have the same card height.
   const uniqueSuppliers = [...new Set(targetLines.map(line => line.supplierId))];
-
-  el.bifurcatedOrderContainer.innerHTML = uniqueSuppliers
-    .map((sId) => {
-      const vendorLabel = supplierName(sId);
-      const supplierLines = targetLines.filter(line => line.supplierId === sId);
-      const sLinesCount = supplierLines.length;
-      const latestDate = supplierLines.reduce((latest, line) => {
-        const t = new Date(line.dateCreated || 0).getTime();
-        return t > latest ? t : latest;
-      }, 0);
-      const dateLabel = latestDate ? formatDisplayDate(new Date(latestDate).toISOString()) : formatDisplayDate();
-
-      return `
-        <div class="single-line-row" data-supplier-id="${sId}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
-          <div class="vendor-title-wrapper">
-            <div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;">
-              <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
-              <span class="subtle" style="font-size: 0.78rem;">Added ${escapeHtml(dateLabel)}</span>
-            </div>
-          </div>
-          <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;">
-            <span class="badge-count">${sLinesCount} Item${sLinesCount === 1 ? '' : 's'}</span>
-          </div>
-        </div>
-      `;
-    }).join("");
-
+  el.bifurcatedOrderContainer.innerHTML = uniqueSuppliers.map((sId) => {
+    const vendorLabel = supplierName(sId); const supplierLines = targetLines.filter(line => line.supplierId === sId);
+    const sLinesCount = supplierLines.length; const latestDate = supplierLines.reduce((latest, line) => { const t = new Date(line.dateCreated || 0).getTime(); return t > latest ? t : latest; }, 0);
+    const dateLabel = latestDate ? formatDisplayDate(new Date(latestDate).toISOString()) : formatDisplayDate();
+    return `<div class="single-line-row" data-supplier-id="${sId}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
+        <div class="vendor-title-wrapper"><div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;"><span class="vendor-title">${escapeHtml(vendorLabel)}</span><span class="subtle" style="font-size: 0.78rem;">Added ${escapeHtml(dateLabel)}</span></div></div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;"><span class="badge-count">${sLinesCount} Item${sLinesCount === 1 ? '' : 's'}</span></div>
+      </div>`;
+  }).join("");
   setupMasterLongPressTriggers();
 }
 
-// Selected order-group keys ("supplierId::batchId"), highlighted directly
-// on their row instead of via a checkbox — same visual pattern as WhatsApp
-// message selection.
 let masterSelectedKeys = new Set();
-
-function masterRowKey(row) {
-  return `${row.dataset.supplierId}::${row.dataset.batchId || ""}`;
-}
-
+function masterRowKey(row) { return `${row.dataset.supplierId}::${row.dataset.batchId || ""}`; }
 function setupMasterLongPressTriggers() {
-  const rows = el.bifurcatedOrderContainer.querySelectorAll(".single-line-row");
-  rows.forEach(row => {
-    row.addEventListener("mousedown", (e) => startMasterLongPress(e, row));
-    row.addEventListener("mouseup", cancelMasterLongPress);
-    row.addEventListener("mouseleave", cancelMasterLongPress);
-    
+  el.bifurcatedOrderContainer.querySelectorAll(".single-line-row").forEach(row => {
+    row.addEventListener("mousedown", (e) => startMasterLongPress(e, row)); row.addEventListener("mouseup", cancelMasterLongPress); row.addEventListener("mouseleave", cancelMasterLongPress);
     let masterTouchStartX = 0, masterTouchStartY = 0;
-    row.addEventListener("touchstart", (e) => {
-      masterTouchStartX = e.touches[0].clientX;
-      masterTouchStartY = e.touches[0].clientY;
-      startMasterLongPress(e, row);
-    }, { passive: true });
-    row.addEventListener("touchmove", (e) => {
-      const dx = Math.abs(e.touches[0].clientX - masterTouchStartX);
-      const dy = Math.abs(e.touches[0].clientY - masterTouchStartY);
-      if (dx > 8 || dy > 8) cancelMasterLongPress();
-    }, { passive: true });
-    row.addEventListener("touchend", cancelMasterLongPress);
-    row.addEventListener("touchcancel", cancelMasterLongPress);
+    row.addEventListener("touchstart", (e) => { masterTouchStartX = e.touches[0].clientX; masterTouchStartY = e.touches[0].clientY; startMasterLongPress(e, row); }, { passive: true });
+    row.addEventListener("touchmove", (e) => { const dx = Math.abs(e.touches[0].clientX - masterTouchStartX); const dy = Math.abs(e.touches[0].clientY - masterTouchStartY); if (dx > 8 || dy > 8) cancelMasterLongPress(); }, { passive: true });
+    row.addEventListener("touchend", cancelMasterLongPress); row.addEventListener("touchcancel", cancelMasterLongPress);
   });
 }
-
 function startMasterLongPress(e, row) {
   isLongPressTriggered = false;
   longPressTimer = setTimeout(() => {
-    isLongPressTriggered = true;
-    if (el.masterView) el.masterView.classList.add("selection-active");
-    const key = masterRowKey(row);
-    masterSelectedKeys.add(key);
-    row.classList.add("row-selected");
-    updateMasterBulkDeleteToolbarState();
-    
-    if (navigator.vibrate) navigator.vibrate(50); 
+    isLongPressTriggered = true; if (el.masterView) el.masterView.classList.add("selection-active");
+    const key = masterRowKey(row); masterSelectedKeys.add(key); row.classList.add("row-selected");
+    updateMasterBulkDeleteToolbarState(); if (navigator.vibrate) navigator.vibrate(50); 
   }, LONG_PRESS_DURATION);
 }
-
-function cancelMasterLongPress() {
-  if (longPressTimer) clearTimeout(longPressTimer);
-}
-
+function cancelMasterLongPress() { if (longPressTimer) clearTimeout(longPressTimer); }
 function resetMasterSelection() {
   masterSelectedKeys.clear();
-  if (el.bifurcatedOrderContainer) {
-    el.bifurcatedOrderContainer.querySelectorAll(".single-line-row.row-selected").forEach(r => r.classList.remove("row-selected"));
-  }
+  if (el.bifurcatedOrderContainer) el.bifurcatedOrderContainer.querySelectorAll(".single-line-row.row-selected").forEach(r => r.classList.remove("row-selected"));
   if (el.masterView) el.masterView.classList.remove("selection-active");
   if (el.masterBulkDeleteToolbar) el.masterBulkDeleteToolbar.style.display = "none";
 }
 
 if (el.bifurcatedOrderContainer) {
   el.bifurcatedOrderContainer.addEventListener("click", (event) => {
-    if (isLongPressTriggered) {
-      isLongPressTriggered = false;
-      return;
-    }
-
+    if (isLongPressTriggered) { isLongPressTriggered = false; return; }
     if (el.masterView && el.masterView.classList.contains("selection-active")) {
       const targetRow = event.target.closest(".single-line-row");
       if (targetRow) {
         const key = masterRowKey(targetRow);
-        if (masterSelectedKeys.has(key)) {
-          masterSelectedKeys.delete(key);
-          targetRow.classList.remove("row-selected");
-        } else {
-          masterSelectedKeys.add(key);
-          targetRow.classList.add("row-selected");
-        }
+        if (masterSelectedKeys.has(key)) { masterSelectedKeys.delete(key); targetRow.classList.remove("row-selected"); } 
+        else { masterSelectedKeys.add(key); targetRow.classList.add("row-selected"); }
         updateMasterBulkDeleteToolbarState();
       }
       return;
     }
-
-    const targetRow = event.target.closest(".single-line-row");
-    if (!targetRow) return;
+    const targetRow = event.target.closest(".single-line-row"); if (!targetRow) return;
     openSupplierDeepView(targetRow.dataset.supplierId, targetRow.dataset.batchId);
   });
 }
 
-// Selected order-line ids within the currently open supplier detail view,
-// highlighted directly on their card instead of via a checkbox.
 let deepSelectedIds = new Set();
-
 function setupDeepViewLongPressTriggers() {
-  const cards = el.deepViewLinesList.querySelectorAll(".order-card");
-  cards.forEach(card => {
-    card.addEventListener("mousedown", (e) => startDeepLongPress(e, card));
-    card.addEventListener("mouseup", cancelDeepLongPress);
-    card.addEventListener("mouseleave", cancelDeepLongPress);
-    
+  el.deepViewLinesList.querySelectorAll(".order-card").forEach(card => {
+    card.addEventListener("mousedown", (e) => startDeepLongPress(e, card)); card.addEventListener("mouseup", cancelDeepLongPress); card.addEventListener("mouseleave", cancelDeepLongPress);
     let deepTouchStartX = 0, deepTouchStartY = 0;
-    card.addEventListener("touchstart", (e) => {
-      deepTouchStartX = e.touches[0].clientX;
-      deepTouchStartY = e.touches[0].clientY;
-      startDeepLongPress(e, card);
-    }, { passive: true });
-    card.addEventListener("touchmove", (e) => {
-      const dx = Math.abs(e.touches[0].clientX - deepTouchStartX);
-      const dy = Math.abs(e.touches[0].clientY - deepTouchStartY);
-      if (dx > 8 || dy > 8) cancelDeepLongPress();
-    }, { passive: true });
-    card.addEventListener("touchend", cancelDeepLongPress);
-    card.addEventListener("touchcancel", cancelDeepLongPress);
+    card.addEventListener("touchstart", (e) => { deepTouchStartX = e.touches[0].clientX; deepTouchStartY = e.touches[0].clientY; startDeepLongPress(e, card); }, { passive: true });
+    card.addEventListener("touchmove", (e) => { const dx = Math.abs(e.touches[0].clientX - deepTouchStartX); const dy = Math.abs(e.touches[0].clientY - deepTouchStartY); if (dx > 8 || dy > 8) cancelDeepLongPress(); }, { passive: true });
+    card.addEventListener("touchend", cancelDeepLongPress); card.addEventListener("touchcancel", cancelDeepLongPress);
   });
 }
-
 function startDeepLongPress(e, card) {
-  if (currentStatusFilter !== 'active') return;
-  if (e.target.closest('button[data-action]')) return;
-
+  if (currentStatusFilter !== 'active') return; if (e.target.closest('button[data-action]')) return;
   isLongPressTriggered = false;
   longPressTimer = setTimeout(() => {
-    isLongPressTriggered = true;
-    if (el.deepView) el.deepView.classList.add("selection-active");
-    deepSelectedIds.add(card.dataset.lineId);
-    card.classList.add("row-selected");
-    updateBulkDeleteToolbarState();
-    
+    isLongPressTriggered = true; if (el.deepView) el.deepView.classList.add("selection-active");
+    deepSelectedIds.add(card.dataset.lineId); card.classList.add("row-selected"); updateBulkDeleteToolbarState();
     if (navigator.vibrate) navigator.vibrate(50);
   }, LONG_PRESS_DURATION);
 }
-
-function cancelDeepLongPress() {
-  if (longPressTimer) clearTimeout(longPressTimer);
-}
-
+function cancelDeepLongPress() { if (longPressTimer) clearTimeout(longPressTimer); }
 function resetDeepSelection() {
   deepSelectedIds.clear();
-  if (el.deepViewLinesList) {
-    el.deepViewLinesList.querySelectorAll(".order-card.row-selected").forEach(c => c.classList.remove("row-selected"));
-  }
+  if (el.deepViewLinesList) el.deepViewLinesList.querySelectorAll(".order-card.row-selected").forEach(c => c.classList.remove("row-selected"));
   if (el.deepView) el.deepView.classList.remove("selection-active");
   if (el.bulkDeleteToolbar) el.bulkDeleteToolbar.style.display = "none";
 }
 
 if (el.deepViewLinesList) {
   el.deepViewLinesList.addEventListener("click", (event) => {
-    if (isLongPressTriggered) {
-      isLongPressTriggered = false;
-      return;
-    }
+    if (isLongPressTriggered) { isLongPressTriggered = false; return; }
     if (!el.deepView || !el.deepView.classList.contains("selection-active")) return;
-
-    const card = event.target.closest(".order-card");
-    if (!card) return;
+    const card = event.target.closest(".order-card"); if (!card) return;
     const lineId = card.dataset.lineId;
-    if (deepSelectedIds.has(lineId)) {
-      deepSelectedIds.delete(lineId);
-      card.classList.remove("row-selected");
-    } else {
-      deepSelectedIds.add(lineId);
-      card.classList.add("row-selected");
-    }
+    if (deepSelectedIds.has(lineId)) { deepSelectedIds.delete(lineId); card.classList.remove("row-selected"); } 
+    else { deepSelectedIds.add(lineId); card.classList.add("row-selected"); }
     updateBulkDeleteToolbarState();
   });
 }
 
-
-
-// ---------- Quantity modal (dual mode: add-to-order or edit-existing-line) ----------
-let editingQtyLineId = null;   // set when editing an existing line
-let addingOrderItemId = null;  // set when adding a new line from a stock tap
-let alreadyInListLineId = null; // holds the existing line if already-in-list dialog is showing
+let editingQtyLineId = null;   
+let addingOrderItemId = null;  
+let alreadyInListLineId = null; 
 
 function openAddToOrderModal(item) {
-  // Check if this item is already in the active order — show info dialog if so
-  const existingLine = state.order.find(
-    (l) => l.itemId === item.id && (l.status || "active") === "active"
-  );
-
+  const existingLine = state.order.find((l) => l.itemId === item.id && (l.status || "active") === "active");
   if (existingLine) {
-    // Show the "already in list" dialog instead of the add form
     alreadyInListLineId = existingLine.id;
     if (el.alreadyInListTitle) el.alreadyInListTitle.textContent = "Already in Order";
     if (el.alreadyInListBody) {
-      el.alreadyInListBody.innerHTML = `
-        <strong>${escapeHtml(item.name)}</strong> is already in your active order list.<br><br>
-        Current quantity: <strong>${existingLine.quantity} ${escapeHtml(item.unit || "pcs")}</strong><br><br>
-        Would you like to edit the quantity?
-      `;
+      el.alreadyInListBody.innerHTML = `<strong>${escapeHtml(item.name)}</strong> is already in your active order list.<br><br>Current quantity: <strong>${existingLine.quantity} ${escapeHtml(item.unit || "pcs")}</strong><br><br>Would you like to edit the quantity?`;
     }
-    if (el.alreadyInListModal) el.alreadyInListModal.style.display = "flex";
-    return;
+    if (el.alreadyInListModal) el.alreadyInListModal.style.display = "flex"; return;
   }
-
-  // Item not in active order — open the normal add form
-  editingQtyLineId = null;
-  addingOrderItemId = item.id;
-
+  editingQtyLineId = null; addingOrderItemId = item.id;
   if (el.editQtyModalTitle) el.editQtyModalTitle.textContent = "Add to Order";
   if (el.editQtySaveBtn) el.editQtySaveBtn.textContent = "Add";
   if (el.editQtyItemName) el.editQtyItemName.textContent = `${item.name} (${item.unit || "pcs"})`;
   if (el.editQtyInput) el.editQtyInput.value = 1;
   if (el.editQtyModal) el.editQtyModal.style.display = "flex";
-  setTimeout(() => {
-    if (el.editQtyInput) { el.editQtyInput.focus(); el.editQtyInput.select(); }
-  }, 50);
+  setTimeout(() => { if (el.editQtyInput) { el.editQtyInput.focus(); el.editQtyInput.select(); } }, 50);
 }
 
-// ---------- Reusable confirm modal ----------
-// Usage: const yes = await showConfirm("Title", "Message", "Button label");
 let _confirmResolve = null;
-
 function showConfirm(title, body, okLabel = "Delete", okDanger = true) {
   return new Promise((resolve) => {
     _confirmResolve = resolve;
     if (el.confirmModalTitle) el.confirmModalTitle.textContent = title;
     if (el.confirmModalBody) el.confirmModalBody.textContent = body;
-    if (el.confirmModalOkBtn) {
-      el.confirmModalOkBtn.textContent = okLabel;
-      el.confirmModalOkBtn.style.background = okDanger ? "var(--danger)" : "var(--primary)";
-    }
+    if (el.confirmModalOkBtn) { el.confirmModalOkBtn.textContent = okLabel; el.confirmModalOkBtn.style.background = okDanger ? "var(--danger)" : "var(--primary)"; }
     if (el.confirmModal) el.confirmModal.style.display = "flex";
   });
 }
-
 function _closeConfirmModal(result) {
   if (el.confirmModal) el.confirmModal.style.display = "none";
   if (_confirmResolve) { _confirmResolve(result); _confirmResolve = null; }
@@ -1613,41 +882,19 @@ function _closeConfirmModal(result) {
 
 if (el.confirmModalOkBtn) el.confirmModalOkBtn.addEventListener("click", () => _closeConfirmModal(true));
 if (el.confirmModalCancelBtn) el.confirmModalCancelBtn.addEventListener("click", () => _closeConfirmModal(false));
-if (el.confirmModal) {
-  el.confirmModal.addEventListener("click", (e) => {
-    if (e.target === el.confirmModal) _closeConfirmModal(false);
-  });
-}
+if (el.confirmModal) el.confirmModal.addEventListener("click", (e) => { if (e.target === el.confirmModal) _closeConfirmModal(false); });
 
-function closeAlreadyInListModal() {
-  alreadyInListLineId = null;
-  if (el.alreadyInListModal) el.alreadyInListModal.style.display = "none";
-}
-
-if (el.alreadyInListNoBtn) {
-  el.alreadyInListNoBtn.addEventListener("click", closeAlreadyInListModal);
-}
-
+function closeAlreadyInListModal() { alreadyInListLineId = null; if (el.alreadyInListModal) el.alreadyInListModal.style.display = "none"; }
+if (el.alreadyInListNoBtn) el.alreadyInListNoBtn.addEventListener("click", closeAlreadyInListModal);
 if (el.alreadyInListEditBtn) {
   el.alreadyInListEditBtn.addEventListener("click", () => {
-    const line = state.order.find((l) => l.id === alreadyInListLineId);
-    if (!line) { closeAlreadyInListModal(); return; }
-    const item = state.stocks.find((s) => s.id === line.itemId);
-    closeAlreadyInListModal();
-    // Open the edit modal for this existing line
-    openEditQtyModal(line, item);
+    const line = state.order.find((l) => l.id === alreadyInListLineId); if (!line) { closeAlreadyInListModal(); return; }
+    const item = state.stocks.find((s) => s.id === line.itemId); closeAlreadyInListModal(); openEditQtyModal(line, item);
   });
 }
+if (el.alreadyInListModal) el.alreadyInListModal.addEventListener("click", (event) => { if (event.target === el.alreadyInListModal) closeAlreadyInListModal(); });
 
-if (el.alreadyInListModal) {
-  el.alreadyInListModal.addEventListener("click", (event) => {
-    if (event.target === el.alreadyInListModal) closeAlreadyInListModal();
-  });
-}
-
-// ---------- Edit Stock Modal ----------
 let editingStockModalId = null;
-
 function openEditStockModal(item) {
   editingStockModalId = item.id;
   if (el.editStockName) el.editStockName.value = item.name;
@@ -1658,18 +905,11 @@ function openEditStockModal(item) {
   setTimeout(() => { if (el.editStockName) { el.editStockName.focus(); } }, 50);
 }
 
-// ---------- Quick Add Supplier Modal ----------
-// Opened from the + button in the supplier search fields on the Add/Edit Stock forms.
-// After saving, auto-selects the new supplier in whichever search field triggered it.
-
 let _quickAddSupplierCallerSearchInput = null;
 let _quickAddSupplierCallerHiddenInput = null;
 
 function openQuickAddSupplierModal(searchInput, hiddenInput) {
-  _quickAddSupplierCallerSearchInput = searchInput;
-  _quickAddSupplierCallerHiddenInput = hiddenInput;
-
-  // Close any open supplier suggestion dropdowns so they don't render on top of this modal
+  _quickAddSupplierCallerSearchInput = searchInput; _quickAddSupplierCallerHiddenInput = hiddenInput;
   if (el.supplierSuggestionsBox) el.supplierSuggestionsBox.style.display = "none";
   if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
   if (el.stockSearchSuggestionsBox) el.stockSearchSuggestionsBox.style.display = "none";
@@ -1678,7 +918,6 @@ function openQuickAddSupplierModal(searchInput, hiddenInput) {
   if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
   if (el.searchSuggestionsBox) el.searchSuggestionsBox.style.display = "none";
 
-  // Pre-fill the name with whatever the user already typed in the search box
   const prefill = searchInput?.value.trim() || "";
   if (el.quickSupplierName) el.quickSupplierName.value = prefill;
   if (el.quickSupplierEmail) el.quickSupplierEmail.value = "";
@@ -1689,8 +928,7 @@ function openQuickAddSupplierModal(searchInput, hiddenInput) {
 
 function closeQuickAddSupplierModal() {
   if (el.quickAddSupplierModal) el.quickAddSupplierModal.style.display = "none";
-  _quickAddSupplierCallerSearchInput = null;
-  _quickAddSupplierCallerHiddenInput = null;
+  _quickAddSupplierCallerSearchInput = null; _quickAddSupplierCallerHiddenInput = null;
 }
 
 function saveQuickAddSupplierModal() {
@@ -1698,86 +936,36 @@ function saveQuickAddSupplierModal() {
   const email = el.quickSupplierEmail?.value.trim() || "";
   const phone = (el.quickSupplierPhone?.value.trim() || "").replace(/[^0-9+]/g, "");
 
-  if (!name) {
-    showConfirm("Missing Name", "Please enter a supplier name.", "OK", false);
-    return;
-  }
-
-  // Duplicate check
-  const duplicate = state.suppliers.find(
-    s => s.name.trim().toLowerCase() === name.toLowerCase()
-  );
+  if (!name) { showConfirm("Missing Name", "Please enter a supplier name.", "OK", false); return; }
+  const duplicate = state.suppliers.find(s => s.name.trim().toLowerCase() === name.toLowerCase());
   if (duplicate) {
-    // Already exists — just select it in the calling field
     if (_quickAddSupplierCallerSearchInput) _quickAddSupplierCallerSearchInput.value = duplicate.name;
     if (_quickAddSupplierCallerHiddenInput) _quickAddSupplierCallerHiddenInput.value = duplicate.id;
-    closeQuickAddSupplierModal();
-    return;
+    closeQuickAddSupplierModal(); return;
   }
 
   const newSupplier = { id: generateUUID(), name, email, phone };
-  state.suppliers.push(newSupplier);
-  saveState();
+  state.suppliers.push(newSupplier); saveState();
   syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] });
-  renderSupplierOptions();
-  renderSupplierList();
+  renderSupplierOptions(); renderSupplierList();
 
-  // Auto-select the new supplier in whichever search field triggered the modal
   if (_quickAddSupplierCallerSearchInput) _quickAddSupplierCallerSearchInput.value = newSupplier.name;
   if (_quickAddSupplierCallerHiddenInput) _quickAddSupplierCallerHiddenInput.value = newSupplier.id;
-
   closeQuickAddSupplierModal();
 }
 
 if (el.quickAddSupplierSaveBtn) el.quickAddSupplierSaveBtn.addEventListener("click", saveQuickAddSupplierModal);
 if (el.quickAddSupplierCancelBtn) el.quickAddSupplierCancelBtn.addEventListener("click", closeQuickAddSupplierModal);
-if (el.quickAddSupplierModal) {
-  el.quickAddSupplierModal.addEventListener("click", (e) => {
-    if (e.target === el.quickAddSupplierModal) closeQuickAddSupplierModal();
-  });
-}
-if (el.quickSupplierName) {
-  el.quickSupplierName.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); saveQuickAddSupplierModal(); }
-  });
-}
-
-// Wire the + buttons to the modal
-if (el.quickAddSupplierBtn) {
-  el.quickAddSupplierBtn.addEventListener("click", () => {
-    if (el.supplierSuggestionsBox) el.supplierSuggestionsBox.style.display = "none";
-    openQuickAddSupplierModal(
-      document.querySelector("#stockSupplierSearchInput"),
-      document.querySelector("#hiddenStockSupplierId")
-    );
-  });
-}
-
-if (el.editStockQuickAddSupplierBtn) {
-  el.editStockQuickAddSupplierBtn.addEventListener("click", () => {
-    if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
-    openQuickAddSupplierModal(el.editStockSupplierSearch, el.editStockHiddenSupplierId);
-  });
-}
-
-// ---------- Quick Add Stock Item Modal ----------
-// Opened from the + button next to "Search & Select Stock Item" on the Order List page.
-// After saving, the new item is added to Stock Details and auto-selected in whichever
-// search field triggered the modal (so it can be added to the order right away).
-//
-// If the supplier isn't in the list yet, the + button next to the supplier field reveals
-// a plain inline "New Supplier Name / Email / Phone" panel — no second modal, no separate
-// confirm step. Whatever is typed there is saved together with the item in a single click
-// of "Add Item".
+if (el.quickAddSupplierModal) el.quickAddSupplierModal.addEventListener("click", (e) => { if (e.target === el.quickAddSupplierModal) closeQuickAddSupplierModal(); });
+if (el.quickSupplierName) el.quickSupplierName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddSupplierModal(); } });
+if (el.quickAddSupplierBtn) el.quickAddSupplierBtn.addEventListener("click", () => { if (el.supplierSuggestionsBox) el.supplierSuggestionsBox.style.display = "none"; openQuickAddSupplierModal(document.querySelector("#stockSupplierSearchInput"), document.querySelector("#hiddenStockSupplierId")); });
+if (el.editStockQuickAddSupplierBtn) el.editStockQuickAddSupplierBtn.addEventListener("click", () => { if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none"; openQuickAddSupplierModal(el.editStockSupplierSearch, el.editStockHiddenSupplierId); });
 
 let _quickAddStockItemCallerSearchInput = null;
 let _quickAddStockItemCallerHiddenInput = null;
 
 function openQuickAddStockItemModal(searchInput, hiddenInput) {
-  _quickAddStockItemCallerSearchInput = searchInput;
-  _quickAddStockItemCallerHiddenInput = hiddenInput;
-
-  // Close any open suggestion dropdowns so they don't render on top of this modal
+  _quickAddStockItemCallerSearchInput = searchInput; _quickAddStockItemCallerHiddenInput = hiddenInput;
   if (el.searchSuggestionsBox) el.searchSuggestionsBox.style.display = "none";
   if (el.supplierSuggestionsBox) el.supplierSuggestionsBox.style.display = "none";
   if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
@@ -1785,7 +973,6 @@ function openQuickAddStockItemModal(searchInput, hiddenInput) {
   if (el.supplierSearchSuggestionsBox) el.supplierSearchSuggestionsBox.style.display = "none";
   if (el.supplierFilterSuggestionsBox) el.supplierFilterSuggestionsBox.style.display = "none";
 
-  // Pre-fill the item name with whatever the user already typed in the search box
   const prefill = searchInput?.value.trim() || "";
   if (el.quickStockItemName) el.quickStockItemName.value = prefill;
   if (el.quickStockItemUnit) el.quickStockItemUnit.value = "";
@@ -1799,20 +986,12 @@ function openQuickAddStockItemModal(searchInput, hiddenInput) {
 
 function closeQuickAddStockItemModal() {
   if (el.quickAddStockItemModal) el.quickAddStockItemModal.style.display = "none";
-  _quickAddStockItemCallerSearchInput = null;
-  _quickAddStockItemCallerHiddenInput = null;
-  closeInlineNewSupplierPanel();
+  _quickAddStockItemCallerSearchInput = null; _quickAddStockItemCallerHiddenInput = null; closeInlineNewSupplierPanel();
 }
 
-// ---- Inline "New Supplier" panel — plain fields, no buttons of its own ----
-
-function isInlineNewSupplierPanelOpen() {
-  return !!(el.quickStockItemNewSupplierPanel && el.quickStockItemNewSupplierPanel.style.display !== "none");
-}
-
+function isInlineNewSupplierPanelOpen() { return !!(el.quickStockItemNewSupplierPanel && el.quickStockItemNewSupplierPanel.style.display !== "none"); }
 function openInlineNewSupplierPanel() {
   if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
-  // Switching to "add new" mode — clear any existing-supplier selection
   if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
   const prefill = el.quickStockItemSupplierSearch?.value.trim() || "";
   if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.value = prefill;
@@ -1821,7 +1000,6 @@ function openInlineNewSupplierPanel() {
   if (el.quickStockItemNewSupplierPanel) el.quickStockItemNewSupplierPanel.style.display = "block";
   setTimeout(() => { if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.focus(); }, 50);
 }
-
 function closeInlineNewSupplierPanel() {
   if (el.quickStockItemNewSupplierPanel) el.quickStockItemNewSupplierPanel.style.display = "none";
   if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.value = "";
@@ -1829,33 +1007,16 @@ function closeInlineNewSupplierPanel() {
   if (el.quickStockItemNewSupplierPhone) el.quickStockItemNewSupplierPhone.value = "";
 }
 
-// + button toggles the inline panel open/closed — no separate confirm/cancel buttons
-if (el.quickStockItemQuickAddSupplierBtn) {
-  el.quickStockItemQuickAddSupplierBtn.addEventListener("click", () => {
-    if (isInlineNewSupplierPanelOpen()) {
-      closeInlineNewSupplierPanel();
-    } else {
-      openInlineNewSupplierPanel();
-    }
-  });
-}
+if (el.quickStockItemQuickAddSupplierBtn) el.quickStockItemQuickAddSupplierBtn.addEventListener("click", () => { if (isInlineNewSupplierPanelOpen()) closeInlineNewSupplierPanel(); else openInlineNewSupplierPanel(); });
 
 function saveQuickAddStockItemModal() {
   const name = el.quickStockItemName?.value.trim();
   const unit = formatUnit(el.quickStockItemUnit?.value || "");
   let supplierId = el.quickStockItemHiddenSupplierId?.value || "";
 
-  if (!name) {
-    showConfirm("Missing Name", "Please enter an item name.", "OK", false);
-    return;
-  }
+  if (!name) { showConfirm("Missing Name", "Please enter an item name.", "OK", false); return; }
+  if (!unit) { showConfirm("Missing Unit", "Please enter a unit (pcs, packs, bags, kg, etc.).", "OK", false); return; }
 
-  if (!unit) {
-    showConfirm("Missing Unit", "Please enter a unit (pcs, packs, bags, kg, etc.).", "OK", false);
-    return;
-  }
-
-  // Read the inline new-supplier fields directly — no separate confirm step
   let newSupplierName = "", newSupplierEmail = "", newSupplierPhone = "";
   if (!supplierId && isInlineNewSupplierPanelOpen()) {
     newSupplierName = el.quickStockItemNewSupplierName?.value.trim() || "";
@@ -1863,150 +1024,63 @@ function saveQuickAddStockItemModal() {
     newSupplierPhone = (el.quickStockItemNewSupplierPhone?.value.trim() || "").replace(/[^0-9+]/g, "");
   }
 
-  if (!supplierId && !newSupplierName) {
-    showConfirm("Missing Supplier", "Please select a supplier from the autocomplete suggestions list, or tap + and enter a new supplier name.", "OK", false);
-    return;
-  }
+  if (!supplierId && !newSupplierName) { showConfirm("Missing Supplier", "Please select a supplier from the autocomplete suggestions list, or tap + and enter a new supplier name.", "OK", false); return; }
 
-  // Duplicate check — same item name (case-insensitive) already exists
-  const duplicate = state.stocks.find(
-    s => s.name.trim().toLowerCase() === name.toLowerCase()
-  );
+  const duplicate = state.stocks.find(s => s.name.trim().toLowerCase() === name.toLowerCase());
   if (duplicate) {
-    // Already exists — just select it in the calling field
     if (_quickAddStockItemCallerSearchInput) _quickAddStockItemCallerSearchInput.value = duplicate.name;
     if (_quickAddStockItemCallerHiddenInput) _quickAddStockItemCallerHiddenInput.value = duplicate.id;
-    closeQuickAddStockItemModal();
-    return;
+    closeQuickAddStockItemModal(); return;
   }
 
-  // Create the new supplier now, atomically with the stock item, in this one click
   if (!supplierId && newSupplierName) {
-    const existingSupplier = state.suppliers.find(
-      s => s.name.trim().toLowerCase() === newSupplierName.toLowerCase()
-    );
-    if (existingSupplier) {
-      supplierId = existingSupplier.id;
-    } else {
+    const existingSupplier = state.suppliers.find(s => s.name.trim().toLowerCase() === newSupplierName.toLowerCase());
+    if (existingSupplier) { supplierId = existingSupplier.id; } 
+    else {
       const newSupplier = { id: generateUUID(), name: newSupplierName, email: newSupplierEmail, phone: newSupplierPhone };
-      state.suppliers.push(newSupplier);
-      syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] });
-      renderSupplierOptions();
-      renderSupplierList();
-      supplierId = newSupplier.id;
+      state.suppliers.push(newSupplier); syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] }); renderSupplierOptions(); renderSupplierList(); supplierId = newSupplier.id;
     }
   }
 
   const newStock = { id: generateUUID(), name, supplierId, unit };
-  state.stocks.push(newStock);
-  saveState();
-  syncToSupabase("stocks", "upsert", { rows: [stockToDb(newStock)] });
-  render();
-
-  // Auto-select the new item in whichever search field triggered the modal
+  state.stocks.push(newStock); saveState(); syncToSupabase("stocks", "upsert", { rows: [stockToDb(newStock)] }); render();
   if (_quickAddStockItemCallerSearchInput) _quickAddStockItemCallerSearchInput.value = newStock.name;
   if (_quickAddStockItemCallerHiddenInput) _quickAddStockItemCallerHiddenInput.value = newStock.id;
-
   closeQuickAddStockItemModal();
 }
 
 if (el.quickAddStockItemSaveBtn) el.quickAddStockItemSaveBtn.addEventListener("click", saveQuickAddStockItemModal);
 if (el.quickAddStockItemCancelBtn) el.quickAddStockItemCancelBtn.addEventListener("click", closeQuickAddStockItemModal);
-if (el.quickAddStockItemModal) {
-  el.quickAddStockItemModal.addEventListener("click", (e) => {
-    if (e.target === el.quickAddStockItemModal) closeQuickAddStockItemModal();
-  });
-}
-if (el.quickStockItemName) {
-  el.quickStockItemName.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
-  });
-}
-if (el.quickStockItemUnit) {
-  el.quickStockItemUnit.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
-  });
-}
-if (el.quickStockItemNewSupplierName) {
-  el.quickStockItemNewSupplierName.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
-  });
-}
-if (el.quickStockItemNewSupplierEmail) {
-  el.quickStockItemNewSupplierEmail.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
-  });
-}
-if (el.quickStockItemNewSupplierPhone) {
-  el.quickStockItemNewSupplierPhone.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); }
-  });
-}
+if (el.quickAddStockItemModal) el.quickAddStockItemModal.addEventListener("click", (e) => { if (e.target === el.quickAddStockItemModal) closeQuickAddStockItemModal(); });
+if (el.quickStockItemName) el.quickStockItemName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); } });
+if (el.quickStockItemUnit) el.quickStockItemUnit.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); } });
+if (el.quickStockItemNewSupplierName) el.quickStockItemNewSupplierName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveQuickAddStockItemModal(); } });
 
-// Supplier autocomplete inside the quick add stock item modal
 if (el.quickStockItemSupplierSearch) {
   const showQuickStockItemSuppliers = () => {
     const query = el.quickStockItemSupplierSearch.value.trim().toLowerCase();
-    const matches = (query
-      ? state.suppliers.filter(s => s.name.toLowerCase().includes(query))
-      : [...state.suppliers]
-    ).sort((a, b) => a.name.localeCompare(b.name));
-
-    if (!state.suppliers.length) {
-      el.quickStockItemSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers added yet. Use the + button to add one.</div>`;
-    } else if (!matches.length) {
-      el.quickStockItemSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No matches. Use the + button to add "${escapeHtml(el.quickStockItemSupplierSearch.value.trim())}" as a new supplier.</div>`;
-    } else {
-      el.quickStockItemSupplierSuggestionsBox.innerHTML = matches.map(s =>
-        `<div class="suggestion-item supplier-suggestion-item" data-id="${s.id}" data-name="${escapeHtml(s.name)}">
-          <strong>${escapeHtml(s.name)}</strong>
-        </div>`
-      ).join("");
-    }
+    const matches = (query ? state.suppliers.filter(s => s.name.toLowerCase().includes(query)) : [...state.suppliers]).sort((a, b) => a.name.localeCompare(b.name));
+    if (!state.suppliers.length) { el.quickStockItemSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted); cursor:default;">No suppliers added yet. Use the + button to add one.</div>`; } 
+    else if (!matches.length) { el.quickStockItemSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No matches. Use the + button to add "${escapeHtml(el.quickStockItemSupplierSearch.value.trim())}" as a new supplier.</div>`; } 
+    else { el.quickStockItemSupplierSuggestionsBox.innerHTML = matches.map(s => `<div class="suggestion-item supplier-suggestion-item" data-id="${s.id}" data-name="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong></div>`).join(""); }
     el.quickStockItemSupplierSuggestionsBox.style.display = "block";
   };
-
-  el.quickStockItemSupplierSearch.addEventListener("input", () => {
-    // Typing to search again means "not adding new" — collapse the inline panel
-    closeInlineNewSupplierPanel();
-    if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = "";
-    showQuickStockItemSuppliers();
-  });
+  el.quickStockItemSupplierSearch.addEventListener("input", () => { closeInlineNewSupplierPanel(); if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = ""; showQuickStockItemSuppliers(); });
   el.quickStockItemSupplierSearch.addEventListener("focus", showQuickStockItemSuppliers);
 }
 
 if (el.quickStockItemSupplierSuggestionsBox) {
   el.quickStockItemSupplierSuggestionsBox.addEventListener("mousedown", (e) => {
-    const item = e.target.closest(".supplier-suggestion-item");
-    if (!item) return;
-    e.preventDefault();
+    const item = e.target.closest(".supplier-suggestion-item"); if (!item) return; e.preventDefault();
     if (el.quickStockItemSupplierSearch) el.quickStockItemSupplierSearch.value = item.dataset.name;
     if (el.quickStockItemHiddenSupplierId) el.quickStockItemHiddenSupplierId.value = item.dataset.id;
-    closeInlineNewSupplierPanel();
-    el.quickStockItemSupplierSuggestionsBox.style.display = "none";
+    closeInlineNewSupplierPanel(); el.quickStockItemSupplierSuggestionsBox.style.display = "none";
   });
 }
 
-// Header + button: opens the add-stock-item modal from any page, with no
-// caller field to fill back in (it's a standalone add, not part of a search).
-if (el.headerAddStockBtn) {
-  el.headerAddStockBtn.addEventListener("click", () => {
-    openQuickAddStockItemModal(null, null);
-  });
-}
-
-if (el.stockPageAddItemBtn) {
-  el.stockPageAddItemBtn.addEventListener("click", () => {
-    openQuickAddStockItemModal(null, null);
-  });
-}
-
-// Wire the + button next to "Search & Select Stock Item" on the Order List page
-if (el.quickAddStockItemBtn) {
-  el.quickAddStockItemBtn.addEventListener("click", () => {
-    openQuickAddStockItemModal(el.orderItemSearchInput, el.hiddenOrderItemId);
-  });
-}
+if (el.headerAddStockBtn) el.headerAddStockBtn.addEventListener("click", () => openQuickAddStockItemModal(null, null));
+if (el.stockPageAddItemBtn) el.stockPageAddItemBtn.addEventListener("click", () => openQuickAddStockItemModal(null, null));
+if (el.quickAddStockItemBtn) el.quickAddStockItemBtn.addEventListener("click", () => openQuickAddStockItemModal(el.orderItemSearchInput, el.hiddenOrderItemId));
 
 function closeEditStockModal() {
   editingStockModalId = null;
@@ -2015,90 +1089,39 @@ function closeEditStockModal() {
 }
 
 function saveEditStockModal() {
-  const name = el.editStockName?.value.trim();
-  const supplierId = el.editStockHiddenSupplierId?.value;
-  const unit = formatUnit(el.editStockUnit?.value);
-
-  if (!name) {
-    showConfirm("Missing Name", "Please enter an item name.", "OK", false);
-    return;
-  }
-  if (!supplierId) {
-    showConfirm("Missing Supplier", "Please select a supplier from the list.", "OK", false);
-    return;
-  }
-
-  // Duplicate check — another item with the same name already exists (exclude the one being edited)
-  const duplicate = state.stocks.find(
-    s => s.id !== editingStockModalId && s.name.trim().toLowerCase() === name.toLowerCase()
-  );
-  if (duplicate) {
-    showConfirm(
-      "Name Already Exists",
-      `"${name}" is already in your stock list.\n\nPlease use a different name for this item.`,
-      "OK",
-      false
-    );
-    return;
-  }
-
-  const item = state.stocks.find(s => s.id === editingStockModalId);
-  if (!item) { closeEditStockModal(); return; }
-
-  item.name = name;
-  item.supplierId = supplierId;
-  item.unit = unit;
-  saveState();
-  syncToSupabase("stocks", "upsert", { rows: [stockToDb(item)] });
-  closeEditStockModal();
-  render();
+  const name = el.editStockName?.value.trim(); const supplierId = el.editStockHiddenSupplierId?.value; const unit = formatUnit(el.editStockUnit?.value);
+  if (!name) { showConfirm("Missing Name", "Please enter an item name.", "OK", false); return; }
+  if (!supplierId) { showConfirm("Missing Supplier", "Please select a supplier from the list.", "OK", false); return; }
+  const duplicate = state.stocks.find(s => s.id !== editingStockModalId && s.name.trim().toLowerCase() === name.toLowerCase());
+  if (duplicate) { showConfirm("Name Already Exists", `"${name}" is already in your stock list.\n\nPlease use a different name for this item.`, "OK", false); return; }
+  const item = state.stocks.find(s => s.id === editingStockModalId); if (!item) { closeEditStockModal(); return; }
+  item.name = name; item.supplierId = supplierId; item.unit = unit; saveState(); syncToSupabase("stocks", "upsert", { rows: [stockToDb(item)] }); closeEditStockModal(); render();
 }
 
 if (el.editStockSaveBtn) el.editStockSaveBtn.addEventListener("click", saveEditStockModal);
 if (el.editStockCancelBtn) el.editStockCancelBtn.addEventListener("click", closeEditStockModal);
-if (el.editStockModal) {
-  el.editStockModal.addEventListener("click", (e) => { if (e.target === el.editStockModal) closeEditStockModal(); });
-}
+if (el.editStockModal) el.editStockModal.addEventListener("click", (e) => { if (e.target === el.editStockModal) closeEditStockModal(); });
 
-// Supplier autocomplete inside the edit stock modal
 if (el.editStockSupplierSearch) {
   const showEditStockSuppliers = () => {
     const query = el.editStockSupplierSearch.value.trim().toLowerCase();
-    const matches = (query
-      ? state.suppliers.filter(s => s.name.toLowerCase().includes(query))
-      : [...state.suppliers]
-    ).sort((a, b) => a.name.localeCompare(b.name));
-
-    if (!matches.length) {
-      el.editStockSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No matches</div>`;
-    } else {
-      el.editStockSupplierSuggestionsBox.innerHTML = matches.map(s =>
-        `<div class="suggestion-item supplier-suggestion-item" data-id="${s.id}" data-name="${escapeHtml(s.name)}">
-          <strong>${escapeHtml(s.name)}</strong>
-        </div>`
-      ).join("");
-    }
+    const matches = (query ? state.suppliers.filter(s => s.name.toLowerCase().includes(query)) : [...state.suppliers]).sort((a, b) => a.name.localeCompare(b.name));
+    if (!matches.length) { el.editStockSupplierSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No matches</div>`; } 
+    else { el.editStockSupplierSuggestionsBox.innerHTML = matches.map(s => `<div class="suggestion-item supplier-suggestion-item" data-id="${s.id}" data-name="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong></div>`).join(""); }
     el.editStockSupplierSuggestionsBox.style.display = "block";
   };
-
   el.editStockSupplierSearch.addEventListener("input", showEditStockSuppliers);
   el.editStockSupplierSearch.addEventListener("focus", showEditStockSuppliers);
 }
 
 if (el.editStockSupplierSuggestionsBox) {
   el.editStockSupplierSuggestionsBox.addEventListener("mousedown", (e) => {
-    const item = e.target.closest(".supplier-suggestion-item");
-    if (!item) return;
-    e.preventDefault();
+    const item = e.target.closest(".supplier-suggestion-item"); if (!item) return; e.preventDefault();
     if (el.editStockSupplierSearch) el.editStockSupplierSearch.value = item.dataset.name;
     if (el.editStockHiddenSupplierId) el.editStockHiddenSupplierId.value = item.dataset.id;
     el.editStockSupplierSuggestionsBox.style.display = "none";
-    // Supplier is now the last field — just close the dropdown
   });
 }
-
-// ---------- Edit Supplier Modal ----------
-let editingSupplierModalId = null;
 
 function openEditSupplierModal(supplier) {
   editingSupplierModalId = supplier.id;
@@ -2108,122 +1131,57 @@ function openEditSupplierModal(supplier) {
   if (el.editSupplierModal) el.editSupplierModal.style.display = "flex";
   setTimeout(() => { if (el.editSupplierName) el.editSupplierName.focus(); }, 50);
 }
-
-function closeEditSupplierModal() {
-  editingSupplierModalId = null;
-  if (el.editSupplierModal) el.editSupplierModal.style.display = "none";
-}
-
+function closeEditSupplierModal() { editingSupplierModalId = null; if (el.editSupplierModal) el.editSupplierModal.style.display = "none"; }
 function saveEditSupplierModal() {
-  const name = el.editSupplierName?.value.trim();
-  const email = el.editSupplierEmail?.value.trim();
-  const phone = (el.editSupplierPhone?.value.trim() || "").replace(/[^0-9+]/g, "");
-
+  const name = el.editSupplierName?.value.trim(); const email = el.editSupplierEmail?.value.trim(); const phone = (el.editSupplierPhone?.value.trim() || "").replace(/[^0-9+]/g, "");
   if (!name) { alert("Please enter a supplier name."); return; }
-
-  const supplier = state.suppliers.find(s => s.id === editingSupplierModalId);
-  if (!supplier) { closeEditSupplierModal(); return; }
-
-  supplier.name = name;
-  supplier.email = email;
-  supplier.phone = phone;
-  saveState();
-  syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(supplier)] });
-  closeEditSupplierModal();
-  render();
+  const supplier = state.suppliers.find(s => s.id === editingSupplierModalId); if (!supplier) { closeEditSupplierModal(); return; }
+  supplier.name = name; supplier.email = email; supplier.phone = phone; saveState(); syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(supplier)] }); closeEditSupplierModal(); render();
 }
-
 if (el.editSupplierSaveBtn) el.editSupplierSaveBtn.addEventListener("click", saveEditSupplierModal);
 if (el.editSupplierCancelBtn) el.editSupplierCancelBtn.addEventListener("click", closeEditSupplierModal);
-if (el.editSupplierModal) {
-  el.editSupplierModal.addEventListener("click", (e) => { if (e.target === el.editSupplierModal) closeEditSupplierModal(); });
-}
+if (el.editSupplierModal) el.editSupplierModal.addEventListener("click", (e) => { if (e.target === el.editSupplierModal) closeEditSupplierModal(); });
 
 function openEditQtyModal(line, item) {
-  // "Edit Quantity" mode — opened by tapping ✏️ on an active order card
-  addingOrderItemId = null;
-  editingQtyLineId = line.id;
-
+  addingOrderItemId = null; editingQtyLineId = line.id;
   if (el.editQtyModalTitle) el.editQtyModalTitle.textContent = "Edit Quantity";
   if (el.editQtySaveBtn) el.editQtySaveBtn.textContent = "Save";
   if (el.editQtyItemName) el.editQtyItemName.textContent = `${item?.name || "Deleted item"} (${item?.unit || "pcs"})`;
   if (el.editQtyInput) el.editQtyInput.value = line.quantity;
   if (el.editQtyModal) el.editQtyModal.style.display = "flex";
-  setTimeout(() => {
-    if (el.editQtyInput) { el.editQtyInput.focus(); el.editQtyInput.select(); }
-  }, 50);
+  setTimeout(() => { if (el.editQtyInput) { el.editQtyInput.focus(); el.editQtyInput.select(); } }, 50);
 }
-
-function closeEditQtyModal() {
-  editingQtyLineId = null;
-  addingOrderItemId = null;
-  if (el.editQtyModal) el.editQtyModal.style.display = "none";
-}
-
+function closeEditQtyModal() { editingQtyLineId = null; addingOrderItemId = null; if (el.editQtyModal) el.editQtyModal.style.display = "none"; }
 function saveEditQtyModal() {
-  const qty = Math.max(1, Number(el.editQtyInput?.value) || 0);
-  if (!qty) { alert("Please enter a valid quantity."); return; }
-
+  const qty = Math.max(1, Number(el.editQtyInput?.value) || 0); if (!qty) { alert("Please enter a valid quantity."); return; }
   if (addingOrderItemId) {
-    // Add-to-order mode
-    const item = state.stocks.find((s) => s.id === addingOrderItemId);
-    if (!item) { closeEditQtyModal(); return; }
-    addOrUpdateOrderLine(item, qty);
-    saveState();
-    closeEditQtyModal();
-    return;
+    const item = state.stocks.find((s) => s.id === addingOrderItemId); if (!item) { closeEditQtyModal(); return; }
+    addOrUpdateOrderLine(item, qty); saveState(); closeEditQtyModal(); return;
   }
-
   if (editingQtyLineId) {
-    // Edit-existing-line mode
-    const line = state.order.find((l) => l.id === editingQtyLineId);
-    if (!line) { closeEditQtyModal(); return; }
-    line.quantity = qty;
-    saveState();
-    syncToSupabase("orders", "upsert", { rows: [orderToDb(line)] });
-    closeEditQtyModal();
-    // Only navigate back into the deep view if we're actually in the order details page
-    if (focusedSupplierId && el.deepView && el.deepView.style.display !== "none") {
-      openSupplierDeepView(focusedSupplierId, focusedBatchId);
-    }
+    const line = state.order.find((l) => l.id === editingQtyLineId); if (!line) { closeEditQtyModal(); return; }
+    line.quantity = qty; saveState(); syncToSupabase("orders", "upsert", { rows: [orderToDb(line)] }); closeEditQtyModal();
+    if (focusedSupplierId && el.deepView && el.deepView.style.display !== "none") openSupplierDeepView(focusedSupplierId, focusedBatchId);
   }
 }
 
 if (el.editQtySaveBtn) el.editQtySaveBtn.addEventListener("click", saveEditQtyModal);
 if (el.editQtyCancelBtn) el.editQtyCancelBtn.addEventListener("click", closeEditQtyModal);
-
-if (el.editQtyInput) {
-  el.editQtyInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") { event.preventDefault(); saveEditQtyModal(); }
-    else if (event.key === "Escape") { closeEditQtyModal(); }
-  });
-}
-
-if (el.editQtyModal) {
-  el.editQtyModal.addEventListener("click", (event) => {
-    if (event.target === el.editQtyModal) closeEditQtyModal();
-  });
-}
+if (el.editQtyInput) el.editQtyInput.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); saveEditQtyModal(); } else if (event.key === "Escape") { closeEditQtyModal(); } });
+if (el.editQtyModal) el.editQtyModal.addEventListener("click", (event) => { if (event.target === el.editQtyModal) closeEditQtyModal(); });
 
 function updateMasterBulkDeleteToolbarState() {
   const count = masterSelectedKeys.size;
-
   if (count > 0) {
     const countText = `${count} order${count === 1 ? "" : "s"} selected`;
-    el.masterBulkDeleteCountLabel.textContent = countText;
-    el.masterBulkDeleteToolbar.style.display = "flex";
-    showHeaderSelection("master");
-    setHeaderSelectionCount(countText);
+    el.masterBulkDeleteCountLabel.textContent = countText; el.masterBulkDeleteToolbar.style.display = "flex"; showHeaderSelection("master"); setHeaderSelectionCount(countText);
   } else {
-    el.masterBulkDeleteToolbar.style.display = "none";
-    if (el.masterView) el.masterView.classList.remove("selection-active"); 
-    hideHeaderSelection();
+    el.masterBulkDeleteToolbar.style.display = "none"; if (el.masterView) el.masterView.classList.remove("selection-active"); hideHeaderSelection();
   }
 }
 
 function openSupplierDeepView(supplierId, batchId) {
-  focusedSupplierId = supplierId;
-  focusedBatchId = currentStatusFilter === "completed" ? (batchId || "") : null;
+  focusedSupplierId = supplierId; focusedBatchId = currentStatusFilter === "completed" ? (batchId || "") : null;
   const supplier = state.suppliers.find(s => s.id === supplierId);
   const filteredLines = state.order.filter(line => {
     if (line.supplierId !== supplierId) return false;
@@ -2235,57 +1193,41 @@ function openSupplierDeepView(supplierId, batchId) {
   if (!filteredLines.length) {
     if (el.deepView) el.deepView.style.display = "none";
     if (el.masterView) el.masterView.style.display = "block";
-    renderBifurcatedOrders();
-    return;
+    renderBifurcatedOrders(); return;
   }
 
+  // History API - Register the overlay in the back stack
+  history.pushState(null, "", location.hash + "-detail");
+
   if (el.deepViewVendorTitle) el.deepViewVendorTitle.textContent = supplier ? supplier.name : "Supplier";
-  
-  const dateStr = currentStatusFilter === "completed"
-    ? formatDisplayDate(filteredLines[0].dateCompleted || filteredLines[0].dateCreated)
-    : formatDisplayDate(filteredLines[0].dateCreated);
+  const dateStr = currentStatusFilter === "completed" ? formatDisplayDate(filteredLines[0].dateCompleted || filteredLines[0].dateCreated) : formatDisplayDate(filteredLines[0].dateCreated);
   if (el.deepViewDateLabel) el.deepViewDateLabel.textContent = `Date: ${dateStr}`;
 
   if (el.toggleStatusStateBtn) {
     if (currentStatusFilter === "completed") {
       if (el.deepViewActionsContainer) el.deepViewActionsContainer.style.display = "none";
-      el.toggleStatusStateBtn.textContent = "Move to Active";
-      el.toggleStatusStateBtn.classList.add("revert-mode");
+      el.toggleStatusStateBtn.textContent = "Move to Active"; el.toggleStatusStateBtn.classList.add("revert-mode");
     } else {
       if (el.deepViewActionsContainer) el.deepViewActionsContainer.style.display = "flex";
-      el.toggleStatusStateBtn.textContent = "Move to Completed";
-      el.toggleStatusStateBtn.classList.remove("revert-mode");
+      el.toggleStatusStateBtn.textContent = "Move to Completed"; el.toggleStatusStateBtn.classList.remove("revert-mode");
     }
   }
 
-  resetDeepSelection();
-  hideHeaderSelection();
+  resetDeepSelection(); hideHeaderSelection();
 
   if (el.deepViewLinesList) {
-    el.deepViewLinesList.innerHTML = filteredLines
-      .map((line) => {
-        const item = state.stocks.find(s => s.id === line.itemId);
-        return `
-          <div class="order-card" data-line-id="${line.id}" style="background: #fff; border: 1px solid var(--line); padding: 10px; margin-bottom: 6px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; min-width: 0; gap: 10px;">
-            <div style="min-width: 0; flex: 1 1 auto; margin-left: 2px; overflow: hidden;">
-              <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(item?.name || "Deleted item")}</strong>
-              <div class="order-meta" style="font-size: 0.85rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Qty: ${formatNumber(line.quantity)} ${escapeHtml(item?.unit || "pcs")}</div>
-            </div>
-            
-            ${currentStatusFilter === 'active' ? `
-              <button class="icon-btn" type="button" data-action="edit-deep-line" data-line-id="${line.id}" title="Edit quantity" style="min-width: 32px; min-height: 32px; height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 6px; border: 1px solid var(--line); background:#fff; font-size: 15px;">
-                ✏️
-              </button>
-            ` : ''}
+    el.deepViewLinesList.innerHTML = filteredLines.map((line) => {
+      const item = state.stocks.find(s => s.id === line.itemId);
+      return `<div class="order-card" data-line-id="${line.id}" style="background: #fff; border: 1px solid var(--line); padding: 10px; margin-bottom: 6px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; min-width: 0; gap: 10px;">
+          <div style="min-width: 0; flex: 1 1 auto; margin-left: 2px; overflow: hidden;">
+            <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(item?.name || "Deleted item")}</strong>
+            <div class="order-meta" style="font-size: 0.85rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Qty: ${formatNumber(line.quantity)} ${escapeHtml(item?.unit || "pcs")}</div>
           </div>
-        `;
-      }).join("");
-
+          ${currentStatusFilter === 'active' ? `<button class="icon-btn" type="button" data-action="edit-deep-line" data-line-id="${line.id}" title="Edit quantity" style="min-width: 32px; min-height: 32px; height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 6px; border: 1px solid var(--line); background:#fff; font-size: 15px;">✏️</button>` : ''}
+        </div>`;
+    }).join("");
     setupDeepViewLongPressTriggers(); 
   }
-
-  // Push history state so the Android back button can intercept it
-  history.pushState({ isDeepView: true }, "");
 
   if (el.masterView) el.masterView.style.display = "none";
   if (el.deepView) el.deepView.style.display = "block";
@@ -2293,318 +1235,144 @@ function openSupplierDeepView(supplierId, batchId) {
 
 function updateBulkDeleteToolbarState() {
   const count = deepSelectedIds.size;
-
   if (count > 0 && currentStatusFilter === "active") {
-    const countText = `${count} item${count === 1 ? "" : "s"} selected`;
-    el.bulkDeleteCountLabel.textContent = countText;
-    el.bulkDeleteToolbar.style.display = "flex";
-    showHeaderSelection("deep");
-    setHeaderSelectionCount(countText);
+    const countText = `${count} item${count === 1 ? "" : "s"} selected`; el.bulkDeleteCountLabel.textContent = countText; el.bulkDeleteToolbar.style.display = "flex"; showHeaderSelection("deep"); setHeaderSelectionCount(countText);
   } else {
-    el.bulkDeleteToolbar.style.display = "none";
-    if (el.deepView) el.deepView.classList.remove("selection-active");
-    hideHeaderSelection();
+    el.bulkDeleteToolbar.style.display = "none"; if (el.deepView) el.deepView.classList.remove("selection-active"); hideHeaderSelection();
   }
 }
 
 document.addEventListener("click", async (event) => {
-  if (isLongPressTriggered) {
-    isLongPressTriggered = false;
-    return;
-  }
-
-  const button = event.target.closest("button[data-action]");
-  if (!button) return;
-  const id = button.dataset.id;
-  const action = button.dataset.action;
-
+  if (isLongPressTriggered) { isLongPressTriggered = false; return; }
+  const button = event.target.closest("button[data-action]"); if (!button) return;
+  const id = button.dataset.id; const action = button.dataset.action;
   if (action === "remove-line") {
     if (await showConfirm("Remove Item", "Are you sure you want to permanently delete this order item?")) {
-      state.order = state.order.filter((line) => line.id !== id);
-      saveState();
-      syncToSupabase("orders", "delete", { ids: [id] });
-      render();
+      state.order = state.order.filter((line) => line.id !== id); saveState(); syncToSupabase("orders", "delete", { ids: [id] }); render();
     }
   }
-
   if (action === "edit-deep-line") {
-    const lineId = button.dataset.lineId;
-    const line = state.order.find((l) => l.id === lineId);
-    if (!line) return;
-
-    const item = state.stocks.find((s) => s.id === line.itemId);
-    openEditQtyModal(line, item);
+    const lineId = button.dataset.lineId; const line = state.order.find((l) => l.id === lineId); if (!line) return;
+    const item = state.stocks.find((s) => s.id === line.itemId); openEditQtyModal(line, item);
   }
 });
 
-// History API link for the back button
+// Intercepts the back button so it handles native back gesture safely
 if (el.backToMasterBtn) {
-  el.backToMasterBtn.addEventListener("click", () => {
-    history.back(); 
-  });
+  el.backToMasterBtn.addEventListener("click", () => history.back());
 }
 
 if (el.toggleStatusStateBtn) {
   el.toggleStatusStateBtn.addEventListener("click", async () => {
     if (!focusedSupplierId) return;
     if (currentStatusFilter === "active") {
-      if (await showConfirm("Send Order", "Move this entire purchase list to completed orders?", "Move to Completed", false)) {
-        toggleActiveCompletedState(focusedSupplierId, "completed");
-      }
+      if (await showConfirm("Send Order", "Move this entire purchase list to completed orders?", "Move to Completed", false)) toggleActiveCompletedState(focusedSupplierId, "completed");
     } else {
-      if (await showConfirm("Revert Order", "Move this entire purchase list back to active order lists?", "Move to Active", false)) {
-        toggleActiveCompletedState(focusedSupplierId, "active", focusedBatchId);
-      }
+      if (await showConfirm("Revert Order", "Move this entire purchase list back to active order lists?", "Move to Active", false)) toggleActiveCompletedState(focusedSupplierId, "active", focusedBatchId);
     }
   });
 }
 
 if (el.bulkDeleteExecuteBtn) {
   el.bulkDeleteExecuteBtn.addEventListener("click", async () => {
-    const count = deepSelectedIds.size;
-    if (!count) return;
-
-    if (await showConfirm(
-      "Delete Items",
-      `Remove these ${count} selected item${count === 1 ? "" : "s"} from your active order?`
-    )) {
-      const idsToDelete = Array.from(deepSelectedIds);
-      state.order = state.order.filter(line => !idsToDelete.includes(line.id));
-      saveState();
-      syncToSupabase("orders", "delete", { ids: idsToDelete });
-      openSupplierDeepView(focusedSupplierId, focusedBatchId);
+    const count = deepSelectedIds.size; if (!count) return;
+    if (await showConfirm("Delete Items", `Remove these ${count} selected item${count === 1 ? "" : "s"} from your active order?`)) {
+      const idsToDelete = Array.from(deepSelectedIds); state.order = state.order.filter(line => !idsToDelete.includes(line.id)); saveState(); syncToSupabase("orders", "delete", { ids: idsToDelete }); openSupplierDeepView(focusedSupplierId, focusedBatchId);
     }
   });
 }
 
-if (el.bulkDeleteCancelBtn) {
-  el.bulkDeleteCancelBtn.addEventListener("click", () => {
-    resetDeepSelection();
-  });
-}
+if (el.bulkDeleteCancelBtn) el.bulkDeleteCancelBtn.addEventListener("click", () => resetDeepSelection());
 
 if (el.masterBulkDeleteExecuteBtn) {
   el.masterBulkDeleteExecuteBtn.addEventListener("click", async () => {
-    const count = masterSelectedKeys.size;
-    if (!count) return;
-
+    const count = masterSelectedKeys.size; if (!count) return;
     const statusLabel = currentStatusFilter === "completed" ? "completed" : "active";
-    if (await showConfirm(
-      currentStatusFilter === "completed" ? "Delete Completed Orders" : "Delete Active Orders",
-      `Permanently delete ${count} selected ${statusLabel} order${count === 1 ? "" : "s"}? This cannot be undone.`
-    )) {
+    if (await showConfirm(currentStatusFilter === "completed" ? "Delete Completed Orders" : "Delete Active Orders", `Permanently delete ${count} selected ${statusLabel} order${count === 1 ? "" : "s"}? This cannot be undone.`)) {
       const pairsToDelete = new Set(masterSelectedKeys);
-
-      const idsToDelete = state.order
-        .filter(line => (line.status || "active") === currentStatusFilter && pairsToDelete.has(`${line.supplierId}::${line.batchId || ""}`))
-        .map(line => line.id);
-
-      state.order = state.order.filter(line => !idsToDelete.includes(line.id));
-      saveState();
-      syncToSupabase("orders", "delete", { ids: idsToDelete });
-      resetMasterSelection();
-      renderBifurcatedOrders();
+      const idsToDelete = state.order.filter(line => (line.status || "active") === currentStatusFilter && pairsToDelete.has(`${line.supplierId}::${line.batchId || ""}`)).map(line => line.id);
+      state.order = state.order.filter(line => !idsToDelete.includes(line.id)); saveState(); syncToSupabase("orders", "delete", { ids: idsToDelete }); resetMasterSelection(); renderBifurcatedOrders();
     }
   });
 }
 
-if (el.masterBulkDeleteCancelBtn) {
-  el.masterBulkDeleteCancelBtn.addEventListener("click", () => {
-    resetMasterSelection();
-    if (el.masterBulkDeleteCountLabel) el.masterBulkDeleteCountLabel.textContent = "0 orders selected";
-  });
-}
-
+if (el.masterBulkDeleteCancelBtn) el.masterBulkDeleteCancelBtn.addEventListener("click", () => { resetMasterSelection(); if (el.masterBulkDeleteCountLabel) el.masterBulkDeleteCountLabel.textContent = "0 orders selected"; });
 
 if (el.searchSuggestionsBox) {
   el.searchSuggestionsBox.addEventListener("mousedown", (event) => {
-    const suggestionItem = event.target.closest(".suggestion-item");
-    if (!suggestionItem || !suggestionItem.dataset.id) return;
-
-    event.preventDefault();
-
+    const suggestionItem = event.target.closest(".suggestion-item"); if (!suggestionItem || !suggestionItem.dataset.id) return; event.preventDefault();
     const selectedItem = state.stocks.find(s => s.id === suggestionItem.dataset.id);
-
-    // Check if this item is already in the active order
-    const existingLine = selectedItem
-      ? state.order.find(l => l.itemId === selectedItem.id && (l.status || "active") === "active")
-      : null;
-
+    const existingLine = selectedItem ? state.order.find(l => l.itemId === selectedItem.id && (l.status || "active") === "active") : null;
     if (existingLine && selectedItem) {
-      // Show the already-in-list popup instead of moving to quantity
-      el.searchSuggestionsBox.style.display = "none";
-      alreadyInListLineId = existingLine.id;
+      el.searchSuggestionsBox.style.display = "none"; alreadyInListLineId = existingLine.id;
       if (el.alreadyInListTitle) el.alreadyInListTitle.textContent = "Already in Order";
       if (el.alreadyInListBody) {
-        el.alreadyInListBody.innerHTML = `
-          <strong>${escapeHtml(selectedItem.name)}</strong> is already in your active order list.<br><br>
-          Current quantity: <strong>${existingLine.quantity} ${escapeHtml(selectedItem.unit || "pcs")}</strong><br><br>
-          Would you like to edit the quantity?
-        `;
+        el.alreadyInListBody.innerHTML = `<strong>${escapeHtml(selectedItem.name)}</strong> is already in your active order list.<br><br>Current quantity: <strong>${existingLine.quantity} ${escapeHtml(selectedItem.unit || "pcs")}</strong><br><br>Would you like to edit the quantity?`;
       }
-      if (el.alreadyInListModal) el.alreadyInListModal.style.display = "flex";
-      return;
+      if (el.alreadyInListModal) el.alreadyInListModal.style.display = "flex"; return;
     }
-
-    // Not a duplicate — proceed normally
     if (el.orderItemSearchInput) el.orderItemSearchInput.value = suggestionItem.dataset.name;
     if (el.hiddenOrderItemId) el.hiddenOrderItemId.value = suggestionItem.dataset.id;
-    
-    if (selectedItem && el.orderQtyInlineUnit) {
-      el.orderQtyInlineUnit.textContent = selectedItem.unit || "pcs";
-    }
-
+    if (selectedItem && el.orderQtyInlineUnit) el.orderQtyInlineUnit.textContent = selectedItem.unit || "pcs";
     el.searchSuggestionsBox.style.display = "none";
-    if (el.orderQty) {
-      el.orderQty.focus();
-      el.orderQty.select();
-    }
+    if (el.orderQty) { el.orderQty.focus(); el.orderQty.select(); }
   });
 }
 
 if (el.supplierSuggestionsBox) {
   el.supplierSuggestionsBox.addEventListener("mousedown", (event) => {
-    const suggestionItem = event.target.closest(".supplier-suggestion-item");
-    if (!suggestionItem || !suggestionItem.dataset.id) return;
-
-    // Prevent the default mousedown behavior so the search input never
-    // blurs mid-tap — that's what was letting the dropdown stay open.
-    event.preventDefault();
-
+    const suggestionItem = event.target.closest(".supplier-suggestion-item"); if (!suggestionItem || !suggestionItem.dataset.id) return; event.preventDefault();
     if (el.stockSupplierSearchInput) el.stockSupplierSearchInput.value = suggestionItem.dataset.name;
     if (el.hiddenStockSupplierId) el.hiddenStockSupplierId.value = suggestionItem.dataset.id;
-
     el.supplierSuggestionsBox.style.display = "none";
-    // Supplier is now the last field — just close the dropdown, user can submit
   });
 }
 
 document.addEventListener("click", (event) => {
-  if (el.searchSuggestionsBox && !event.target.closest(".search-suggest-container")) {
-    el.searchSuggestionsBox.style.display = "none";
-  }
-  if (el.supplierSuggestionsBox && !event.target.closest(".search-suggest-container")) {
-    el.supplierSuggestionsBox.style.display = "none";
-  }
-  if (el.stockSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) {
-    el.stockSearchSuggestionsBox.style.display = "none";
-  }
-  if (el.supplierSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) {
-    el.supplierSearchSuggestionsBox.style.display = "none";
-  }
-  if (el.supplierFilterSuggestionsBox && !event.target.closest(".search-suggest-container")) {
-    el.supplierFilterSuggestionsBox.style.display = "none";
-  }
-  if (el.quickStockItemSupplierSuggestionsBox && !event.target.closest(".search-suggest-container")) {
-    el.quickStockItemSupplierSuggestionsBox.style.display = "none";
-  }
+  if (el.searchSuggestionsBox && !event.target.closest(".search-suggest-container")) el.searchSuggestionsBox.style.display = "none";
+  if (el.supplierSuggestionsBox && !event.target.closest(".search-suggest-container")) el.supplierSuggestionsBox.style.display = "none";
+  if (el.stockSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) el.stockSearchSuggestionsBox.style.display = "none";
+  if (el.supplierSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) el.supplierSearchSuggestionsBox.style.display = "none";
+  if (el.supplierFilterSuggestionsBox && !event.target.closest(".search-suggest-container")) el.supplierFilterSuggestionsBox.style.display = "none";
+  if (el.quickStockItemSupplierSuggestionsBox && !event.target.closest(".search-suggest-container")) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
 });
 
-if (el.orderItemSearchInput) {
-  el.orderItemSearchInput.addEventListener("input", () => {
-    handleSearchInput();
-  });
-  el.orderItemSearchInput.addEventListener("focus", handleSearchInput);
-}
-
-if (el.stockSupplierSearchInput) {
-  el.stockSupplierSearchInput.addEventListener("input", handleStockSupplierSearch);
-  el.stockSupplierSearchInput.addEventListener("focus", handleStockSupplierSearch);
-}
+if (el.orderItemSearchInput) { el.orderItemSearchInput.addEventListener("input", handleSearchInput); el.orderItemSearchInput.addEventListener("focus", handleSearchInput); }
+if (el.stockSupplierSearchInput) { el.stockSupplierSearchInput.addEventListener("input", handleStockSupplierSearch); el.stockSupplierSearchInput.addEventListener("focus", handleStockSupplierSearch); }
 
 if (el.stockForm) {
   el.stockForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const name = document.querySelector("#itemName").value.trim();
-    const supplierId = el.hiddenStockSupplierId.value;
-    const unit = formatUnit(document.querySelector("#itemUnit").value);
-
-    if (!supplierId || el.stockSupplierSearchInput.value.trim() === "") {
-      alert("Please select a valid supplier party from the autocomplete search suggestions menu list popup first.");
-      return;
-    }
-
-    // stockForm is now add-only; editing goes through the edit stock modal
-
-    // Duplicate check — same name (case-insensitive) already exists
-    const duplicate = state.stocks.find(
-      s => s.name.trim().toLowerCase() === name.toLowerCase()
-    );
-    if (duplicate) {
-      showConfirm(
-        "Item Already Exists",
-        `"${name}" is already in your stock list.\n\nIf you want to update its details, use the ✏️ edit button on that item instead.`,
-        "OK",
-        false
-      );
-      return;
-    }
-
+    const name = document.querySelector("#itemName").value.trim(); const supplierId = el.hiddenStockSupplierId.value; const unit = formatUnit(document.querySelector("#itemUnit").value);
+    if (!supplierId || el.stockSupplierSearchInput.value.trim() === "") { alert("Please select a valid supplier party from the autocomplete search suggestions menu list popup first."); return; }
+    const duplicate = state.stocks.find(s => s.name.trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) { showConfirm("Item Already Exists", `"${name}" is already in your stock list.\n\nIf you want to update its details, use the ✏️ edit button on that item instead.`, "OK", false); return; }
     const newStock = { id: generateUUID(), name, supplierId, unit };
-    state.stocks.push(newStock);
-    syncToSupabase("stocks", "upsert", { rows: [stockToDb(newStock)] });
-    saveState();
-    el.stockForm.reset();
-    if (el.hiddenStockSupplierId) el.hiddenStockSupplierId.value = "";
-    document.querySelector("#itemUnit").value = "";
-    render();
+    state.stocks.push(newStock); syncToSupabase("stocks", "upsert", { rows: [stockToDb(newStock)] }); saveState();
+    el.stockForm.reset(); if (el.hiddenStockSupplierId) el.hiddenStockSupplierId.value = ""; document.querySelector("#itemUnit").value = ""; render();
   });
 }
 
 if (el.supplierForm) {
   el.supplierForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const name = document.querySelector("#supplierName").value.trim();
-    const email = document.querySelector("#supplierEmail").value.trim();
-    const phone = document.querySelector("#supplierPhone").value.trim().replace(/[^0-9+]/g, "");
-
-    // supplierForm is now add-only; editing goes through the edit supplier modal
-
-    // Duplicate check — same name (case-insensitive) already exists
-    const duplicate = state.suppliers.find(
-      s => s.name.trim().toLowerCase() === name.toLowerCase()
-    );
-    if (duplicate) {
-      alert(`"${name}" already exists in your supplier list. If you want to update their details, use the ✏️ edit button on that supplier instead.`);
-      return;
-    }
-
+    const name = document.querySelector("#supplierName").value.trim(); const email = document.querySelector("#supplierEmail").value.trim(); const phone = document.querySelector("#supplierPhone").value.trim().replace(/[^0-9+]/g, "");
+    const duplicate = state.suppliers.find(s => s.name.trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) { alert(`"${name}" already exists in your supplier list. If you want to update their details, use the ✏️ edit button on that supplier instead.`); return; }
     const newSupplier = { id: generateUUID(), name, email, phone };
-    state.suppliers.push(newSupplier);
-    syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] });
-    saveState();
-    el.supplierForm.reset();
-    render();
+    state.suppliers.push(newSupplier); syncToSupabase("suppliers", "upsert", { rows: [supplierToDb(newSupplier)] }); saveState(); el.supplierForm.reset(); render();
   });
 }
 
 if (el.orderForm) {
   el.orderForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const selectedItemId = el.hiddenOrderItemId.value;
-    const item = state.stocks.find((stock) => stock.id === selectedItemId);
-    
-    if (!item || el.orderItemSearchInput.value !== item.name) {
-      alert("Please select a valid item from the search suggestion menu popup.");
-      return;
-    }
-
-    const qty = el.orderQty.value;
-    addOrUpdateOrderLine(item, qty);
-    saveState();
-
-    el.orderForm.reset();
-    clearInlineUnitLabel(); 
-    
-    if (el.hiddenOrderItemId) el.hiddenOrderItemId.value = "";
-    if (el.orderQty) el.orderQty.value = 1;
-
+    const selectedItemId = el.hiddenOrderItemId.value; const item = state.stocks.find((stock) => stock.id === selectedItemId);
+    if (!item || el.orderItemSearchInput.value !== item.name) { alert("Please select a valid item from the search suggestion menu popup."); return; }
+    const qty = el.orderQty.value; addOrUpdateOrderLine(item, qty); saveState(); el.orderForm.reset(); clearInlineUnitLabel(); 
+    if (el.hiddenOrderItemId) el.hiddenOrderItemId.value = ""; if (el.orderQty) el.orderQty.value = 1;
     if (el.recentOrderAlert) {
-      el.recentOrderAlert.innerHTML = `
-        <div style="background: var(--ok-bg); color: var(--ok-text); padding: 12px; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(36,113,58,0.15)">
-          ✔ Added: ${escapeHtml(item.name)} (Qty: ${qty})
-        </div>
-      `;
+      el.recentOrderAlert.innerHTML = `<div style="background: var(--ok-bg); color: var(--ok-text); padding: 12px; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(36,113,58,0.15)">✔ Added: ${escapeHtml(item.name)} (Qty: ${qty})</div>`;
       el.recentOrderAlert.style.display = "block";
     }
     render();
@@ -2613,413 +1381,127 @@ if (el.orderForm) {
 
 if (el.stockTable) {
   el.stockTable.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-action]");
-    if (!button) return;
-    const id = button.dataset.id;
-    const action = button.dataset.action;
-
-    if (action === "edit-stock") {
-      const item = state.stocks.find((stock) => stock.id === id);
-      if (item) openEditStockModal(item);
-      return;
-    }
+    const button = event.target.closest("button[data-action]"); if (!button) return;
+    if (button.dataset.action === "edit-stock") { const item = state.stocks.find((stock) => stock.id === button.dataset.id); if (item) openEditStockModal(item); return; }
   });
 }
 
-if (el.stockBulkDeleteCancelBtn) {
-  el.stockBulkDeleteCancelBtn.addEventListener("click", () => {
-    hideStockBulkDeleteBar();
-  });
-}
-
+if (el.stockBulkDeleteCancelBtn) el.stockBulkDeleteCancelBtn.addEventListener("click", hideStockBulkDeleteBar);
 if (el.stockBulkDeleteExecuteBtn) {
   el.stockBulkDeleteExecuteBtn.addEventListener("click", async () => {
-    const ids = Array.from(stockSelectedIds);
-    if (!ids.length) return;
-
-    // Check if any selected item appears in any order (active or completed)
-    const blockedItems = ids.filter(id =>
-      state.order.some(line => line.itemId === id)
-    );
-
-    if (blockedItems.length) {
-      await showConfirm(
-        "Cannot Delete",
-        `${blockedItems.length} selected item${blockedItems.length === 1 ? "" : "s"} ${blockedItems.length === 1 ? "is" : "are"} present in your Active or Completed orders.\n\nRemove ${blockedItems.length === 1 ? "it" : "them"} from your orders first, then try deleting again.`,
-        "OK",
-        false
-      );
-      return;
-    }
-
-    if (!await showConfirm(
-      "Delete Stock Items",
-      `Permanently delete ${ids.length} selected stock item${ids.length === 1 ? "" : "s"}? This cannot be undone.`
-    )) return;
-
-    state.stocks = state.stocks.filter(s => !ids.includes(s.id));
-    saveState();
-    ids.forEach(id => {
-      syncToSupabase("stocks", "delete", { ids: [id] });
-    });
-    hideStockBulkDeleteBar();
-    render();
+    const ids = Array.from(stockSelectedIds); if (!ids.length) return;
+    const blockedItems = ids.filter(id => state.order.some(line => line.itemId === id));
+    if (blockedItems.length) { await showConfirm("Cannot Delete", `${blockedItems.length} selected item${blockedItems.length === 1 ? "" : "s"} ${blockedItems.length === 1 ? "is" : "are"} present in your Active or Completed orders.\n\nRemove ${blockedItems.length === 1 ? "it" : "them"} from your orders first, then try deleting again.`, "OK", false); return; }
+    if (!await showConfirm("Delete Stock Items", `Permanently delete ${ids.length} selected stock item${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    state.stocks = state.stocks.filter(s => !ids.includes(s.id)); saveState(); ids.forEach(id => syncToSupabase("stocks", "delete", { ids: [id] }));
+    hideStockBulkDeleteBar(); render();
   });
 }
 
 if (el.deepWhatsAppBtn) {
   el.deepWhatsAppBtn.addEventListener("click", () => {
-    if (!focusedSupplierId) return;
-    const supplier = state.suppliers.find(s => s.id === focusedSupplierId);
-    if (!supplier) return;
-
-    const itemsText = buildCleanTextPayload(focusedSupplierId);
-    const textMessage = `Hello ${supplier.name},\n\nPlease arrange delivery for the following purchase items:\n\n${itemsText}\n\nThank you.`;
-    const cleanPhone = (supplier.phone || "").replace(/[^0-9]/g, "");
-
-    window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(textMessage)}`, "_blank");
-    toggleActiveCompletedState(focusedSupplierId, "completed");
+    if (!focusedSupplierId) return; const supplier = state.suppliers.find(s => s.id === focusedSupplierId); if (!supplier) return;
+    const itemsText = buildCleanTextPayload(focusedSupplierId); const textMessage = `Hello ${supplier.name},\n\nPlease arrange delivery for the following purchase items:\n\n${itemsText}\n\nThank you.`; const cleanPhone = (supplier.phone || "").replace(/[^0-9]/g, "");
+    window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(textMessage)}`, "_blank"); toggleActiveCompletedState(focusedSupplierId, "completed");
   });
 }
 
 if (el.deepEmailBtn) {
   el.deepEmailBtn.addEventListener("click", () => {
-    if (!focusedSupplierId) return;
-    const supplier = state.suppliers.find(s => s.id === focusedSupplierId);
-    if (!supplier) return;
-
-    const itemsText = buildCleanTextPayload(focusedSupplierId);
-    const emailBody = `Hello ${supplier.name},\n\nPlease process the following order for our shop:\n\n${itemsText}\n\nThank you.`;
-
-    window.location.href = `mailto:${encodeURIComponent(supplier.email || "")}?subject=${encodeURIComponent("Shop Purchase Order Request")}&body=${encodeURIComponent(emailBody)}`;
-    toggleActiveCompletedState(focusedSupplierId, "completed");
+    if (!focusedSupplierId) return; const supplier = state.suppliers.find(s => s.id === focusedSupplierId); if (!supplier) return;
+    const itemsText = buildCleanTextPayload(focusedSupplierId); const emailBody = `Hello ${supplier.name},\n\nPlease process the following order for our shop:\n\n${itemsText}\n\nThank you.`;
+    window.location.href = `mailto:${encodeURIComponent(supplier.email || "")}?subject=${encodeURIComponent("Shop Purchase Order Request")}&body=${encodeURIComponent(emailBody)}`; toggleActiveCompletedState(focusedSupplierId, "completed");
   });
 }
 
 if (el.stockSearch) {
-  el.stockSearch.addEventListener("input", () => {
-    renderStockTable();
-    handleStockSearchInput();
-    if (!el.stockSearch.value.trim()) clearQuickOrderBar();
-  });
+  el.stockSearch.addEventListener("input", () => { renderStockTable(); handleStockSearchInput(); if (!el.stockSearch.value.trim()) clearQuickOrderBar(); });
   el.stockSearch.addEventListener("focus", handleStockSearchInput);
 }
 if (el.supplierFilter) {
   const showSupplierFilterSuggestions = () => {
     if (!el.supplierFilterSuggestionsBox) return;
     const query = el.supplierFilter.value.trim().toLowerCase();
-
-    const matches = (query
-      ? state.suppliers.filter(s => s.name.toLowerCase().includes(query))
-      : [...state.suppliers]
-    ).sort((a, b) => a.name.localeCompare(b.name));
-
-    if (!matches.length) {
-      el.supplierFilterSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers match</div>`;
-    } else {
+    const matches = (query ? state.suppliers.filter(s => s.name.toLowerCase().includes(query)) : [...state.suppliers]).sort((a, b) => a.name.localeCompare(b.name));
+    if (!matches.length) { el.supplierFilterSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers match</div>`; } 
+    else {
       const allOption = `<div class="suggestion-item" data-name="" style="color:var(--muted);">Show all suppliers</div>`;
-      el.supplierFilterSuggestionsBox.innerHTML = allOption + matches.map(s =>
-        `<div class="suggestion-item" data-name="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong></div>`
-      ).join("");
+      el.supplierFilterSuggestionsBox.innerHTML = allOption + matches.map(s => `<div class="suggestion-item" data-name="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong></div>`).join("");
     }
     el.supplierFilterSuggestionsBox.style.display = "block";
   };
-
-  el.supplierFilter.addEventListener("input", () => {
-    showSupplierFilterSuggestions();
-    renderStockTable();
-  });
+  el.supplierFilter.addEventListener("input", () => { showSupplierFilterSuggestions(); renderStockTable(); });
   el.supplierFilter.addEventListener("focus", showSupplierFilterSuggestions);
 }
 
-if (el.supplierFilterSuggestionsBox) {
-  el.supplierFilterSuggestionsBox.addEventListener("mousedown", (event) => {
-    const item = event.target.closest(".suggestion-item");
-    if (!item) return;
-    event.preventDefault();
-    el.supplierFilter.value = item.dataset.name || "";
-    el.supplierFilterSuggestionsBox.style.display = "none";
-    renderStockTable();
-  });
-}
-
-if (el.stockSearchSuggestionsBox) {
-  el.stockSearchSuggestionsBox.addEventListener("mousedown", (event) => {
-    const suggestionItem = event.target.closest(".suggestion-item");
-    if (!suggestionItem || !suggestionItem.dataset.id) return;
-
-    event.preventDefault();
-
-    // Fill the search box with the selected item name and filter the table
-    if (el.stockSearch) el.stockSearch.value = suggestionItem.dataset.name || "";
-    el.stockSearchSuggestionsBox.style.display = "none";
-    renderStockTable();
-  });
-}
+if (el.supplierFilterSuggestionsBox) el.supplierFilterSuggestionsBox.addEventListener("mousedown", (event) => { const item = event.target.closest(".suggestion-item"); if (!item) return; event.preventDefault(); el.supplierFilter.value = item.dataset.name || ""; el.supplierFilterSuggestionsBox.style.display = "none"; renderStockTable(); });
+if (el.stockSearchSuggestionsBox) el.stockSearchSuggestionsBox.addEventListener("mousedown", (event) => { const suggestionItem = event.target.closest(".suggestion-item"); if (!suggestionItem || !suggestionItem.dataset.id) return; event.preventDefault(); if (el.stockSearch) el.stockSearch.value = suggestionItem.dataset.name || ""; el.stockSearchSuggestionsBox.style.display = "none"; renderStockTable(); });
 
 if (el.stockQuickOrderAddBtn) {
   el.stockQuickOrderAddBtn.addEventListener("click", () => {
     if (!selectedQuickOrderItem) return;
-    const qty = Math.max(1, Number(el.stockQuickOrderQty?.value) || 1);
-    const addedItem = selectedQuickOrderItem;
-
-    addOrUpdateOrderLine(addedItem, qty);
-    saveState();
-
+    const qty = Math.max(1, Number(el.stockQuickOrderQty?.value) || 1); const addedItem = selectedQuickOrderItem;
+    addOrUpdateOrderLine(addedItem, qty); saveState();
     if (el.stockQuickOrderAlert) {
-      el.stockQuickOrderAlert.innerHTML = `
-        <div style="background: var(--ok-bg); color: var(--ok-text); padding: 12px; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(36,113,58,0.15)">
-          ✔ Added: ${escapeHtml(addedItem.name)} (Qty: ${qty})
-        </div>
-      `;
-      el.stockQuickOrderAlert.style.display = "block";
-      setTimeout(() => {
-        if (el.stockQuickOrderAlert) el.stockQuickOrderAlert.style.display = "none";
-      }, 3000);
+      el.stockQuickOrderAlert.innerHTML = `<div style="background: var(--ok-bg); color: var(--ok-text); padding: 12px; border-radius: 6px; font-size: 0.9rem; border: 1px solid rgba(36,113,58,0.15)">✔ Added: ${escapeHtml(addedItem.name)} (Qty: ${qty})</div>`;
+      el.stockQuickOrderAlert.style.display = "block"; setTimeout(() => { if (el.stockQuickOrderAlert) el.stockQuickOrderAlert.style.display = "none"; }, 3000);
     }
-
-    clearQuickOrderBar();
-    if (el.stockSearch) el.stockSearch.value = "";
-    renderStockTable();
+    clearQuickOrderBar(); if (el.stockSearch) el.stockSearch.value = ""; renderStockTable();
   });
 }
 
-if (el.stockQuickOrderCancelBtn) {
-  el.stockQuickOrderCancelBtn.addEventListener("click", () => {
-    clearQuickOrderBar();
-    if (el.stockSearch) el.stockSearch.value = "";
-    renderStockTable();
-  });
-}
+if (el.stockQuickOrderCancelBtn) el.stockQuickOrderCancelBtn.addEventListener("click", () => { clearQuickOrderBar(); if (el.stockSearch) el.stockSearch.value = ""; renderStockTable(); });
+if (el.stockQuickOrderQty) el.stockQuickOrderQty.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); if (el.stockQuickOrderAddBtn) el.stockQuickOrderAddBtn.click(); } });
+if (el.supplierSearchInput) { el.supplierSearchInput.addEventListener("input", () => { renderSupplierList(); handleSupplierListSearch(); }); el.supplierSearchInput.addEventListener("focus", handleSupplierListSearch); }
+if (el.supplierSearchSuggestionsBox) el.supplierSearchSuggestionsBox.addEventListener("mousedown", (event) => { const suggestionItem = event.target.closest(".suggestion-item"); if (!suggestionItem || !suggestionItem.dataset.id) return; event.preventDefault(); if (el.supplierSearchInput) el.supplierSearchInput.value = suggestionItem.dataset.name; el.supplierSearchSuggestionsBox.style.display = "none"; renderSupplierList(); });
 
-if (el.stockQuickOrderQty) {
-  el.stockQuickOrderQty.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (el.stockQuickOrderAddBtn) el.stockQuickOrderAddBtn.click();
-    }
-  });
-}
-
-if (el.supplierSearchInput) {
-  el.supplierSearchInput.addEventListener("input", () => {
-    renderSupplierList();
-    handleSupplierListSearch();
-  });
-  el.supplierSearchInput.addEventListener("focus", handleSupplierListSearch);
-}
-
-if (el.supplierSearchSuggestionsBox) {
-  el.supplierSearchSuggestionsBox.addEventListener("mousedown", (event) => {
-    const suggestionItem = event.target.closest(".suggestion-item");
-    if (!suggestionItem || !suggestionItem.dataset.id) return;
-
-    event.preventDefault();
-
-    if (el.supplierSearchInput) el.supplierSearchInput.value = suggestionItem.dataset.name;
-    el.supplierSearchSuggestionsBox.style.display = "none";
-    renderSupplierList();
-  });
-}
-
-el.tabButtons.forEach((button) => {
-  button.addEventListener("click", () => showPage(button.dataset.pageTarget));
-});
-
-// ---------- Import / Export ----------
+el.tabButtons.forEach((button) => { button.addEventListener("click", () => showPage(button.dataset.pageTarget)); });
 
 const CSV_HEADERS = ["Item Name", "Supplier", "Unit", "Supplier Email", "Supplier Phone"];
-
-function downloadBlob(content, filename, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-}
-
-function buildStockExportRows() {
-  return state.stocks.map((item) => {
-    const supplier = state.suppliers.find((s) => s.id === item.supplierId);
-    return {
-      name: item.name,
-      supplier: supplier?.name || "",
-      unit: item.unit || "",
-      email: supplier?.email || "",
-      phone: supplier?.phone || ""
-    };
-  });
-}
-
-function toCsvValue(value) {
-  const str = String(value ?? "");
-  if (/[",\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
-
-function buildCsvText() {
-  const rows = buildStockExportRows();
-  const lines = [CSV_HEADERS.map(toCsvValue).join(",")];
-  rows.forEach((row) => {
-    lines.push([row.name, row.supplier, row.unit, row.email, row.phone].map(toCsvValue).join(","));
-  });
-  return lines.join("\r\n");
-}
-
+function downloadBlob(content, filename, mimeType) { const blob = new Blob([content], { type: mimeType }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = filename; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
+function buildStockExportRows() { return state.stocks.map((item) => { const supplier = state.suppliers.find((s) => s.id === item.supplierId); return { name: item.name, supplier: supplier?.name || "", unit: item.unit || "", email: supplier?.email || "", phone: supplier?.phone || "" }; }); }
+function toCsvValue(value) { const str = String(value ?? ""); return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str; }
+function buildCsvText() { const rows = buildStockExportRows(); const lines = [CSV_HEADERS.map(toCsvValue).join(",")]; rows.forEach((row) => { lines.push([row.name, row.supplier, row.unit, row.email, row.phone].map(toCsvValue).join(",")); }); return lines.join("\r\n"); }
 function buildExcelHtml() {
-  const rows = buildStockExportRows();
-  const headerCells = CSV_HEADERS.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
-  const bodyRows = rows
-    .map(
-      (row) => `
-        <tr>
-          <td>${escapeHtml(row.name)}</td>
-          <td>${escapeHtml(row.supplier)}</td>
-          <td>${escapeHtml(row.unit)}</td>
-          <td>${escapeHtml(row.email)}</td>
-          <td>${escapeHtml(row.phone)}</td>
-        </tr>`
-    )
-    .join("");
-
-  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head><meta charset="utf-8"></head>
-<body>
-<table border="1">
-<thead><tr>${headerCells}</tr></thead>
-<tbody>${bodyRows}</tbody>
-</table>
-</body>
-</html>`;
+  const rows = buildStockExportRows(); const headerCells = CSV_HEADERS.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
+  const bodyRows = rows.map((row) => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.supplier)}</td><td>${escapeHtml(row.unit)}</td><td>${escapeHtml(row.email)}</td><td>${escapeHtml(row.phone)}</td></tr>`).join("");
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Stock</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table border="1"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
 }
-
-if (el.exportCsvBtn) {
-  el.exportCsvBtn.addEventListener("click", () => {
-    if (!state.stocks.length) {
-      alert("There are no stock items to export yet.");
-      return;
-    }
-    downloadBlob(buildCsvText(), "shop-stock-list.csv", "text/csv;charset=utf-8;");
-  });
-}
-
-if (el.exportExcelBtn) {
-  el.exportExcelBtn.addEventListener("click", () => {
-    if (!state.stocks.length) {
-      alert("There are no stock items to export yet.");
-      return;
-    }
-    downloadBlob(buildExcelHtml(), "shop-stock-list.xls", "application/vnd.ms-excel");
-  });
-}
-
-if (el.exportDataBtn) {
-  el.exportDataBtn.addEventListener("click", () => {
-    downloadBlob(JSON.stringify(state, null, 2), "shop-stock-data.json", "application/json");
-  });
-}
+if (el.exportCsvBtn) el.exportCsvBtn.addEventListener("click", () => { if (!state.stocks.length) { alert("There are no stock items to export yet."); return; } downloadBlob(buildCsvText(), "shop-stock-list.csv", "text/csv;charset=utf-8;"); });
+if (el.exportExcelBtn) el.exportExcelBtn.addEventListener("click", () => { if (!state.stocks.length) { alert("There are no stock items to export yet."); return; } downloadBlob(buildExcelHtml(), "shop-stock-list.xls", "application/vnd.ms-excel"); });
+if (el.exportDataBtn) el.exportDataBtn.addEventListener("click", () => { downloadBlob(JSON.stringify(state, null, 2), "shop-stock-data.json", "application/json"); });
 
 function findOrCreateSupplierByName(name, email, phone, newlyCreated) {
-  const trimmedName = String(name || "").trim();
-  if (!trimmedName) return "";
-
-  let supplier = state.suppliers.find(
-    (s) => s.name.trim().toLowerCase() === trimmedName.toLowerCase()
-  );
-
-  if (!supplier) {
-    supplier = { id: generateUUID(), name: trimmedName, email: email || "", phone: phone || "" };
-    state.suppliers.push(supplier);
-    if (newlyCreated) newlyCreated.push(supplier);
-  }
-
+  const trimmedName = String(name || "").trim(); if (!trimmedName) return "";
+  let supplier = state.suppliers.find((s) => s.name.trim().toLowerCase() === trimmedName.toLowerCase());
+  if (!supplier) { supplier = { id: generateUUID(), name: trimmedName, email: email || "", phone: phone || "" }; state.suppliers.push(supplier); if (newlyCreated) newlyCreated.push(supplier); }
   return supplier.id;
 }
 
 async function applyImportedStockRows(rows) {
-  const newlyCreatedSuppliers = [];
-  const affectedStocks = [];
-
-  rows
-    .filter((row) => row.name && row.name.trim())
-    .forEach((row) => {
-      const trimmedName = row.name.trim();
-      const supplierId = findOrCreateSupplierByName(row.supplier, row.email, row.phone, newlyCreatedSuppliers);
-      const unit = formatUnit(row.unit);
-
-      // Match an existing item by name (case-insensitive) so re-importing the
-      // same file updates it instead of creating a duplicate. Anything not
-      // matched is a brand new item — nothing existing gets removed.
-      const existing = state.stocks.find(
-        (item) => item.name.trim().toLowerCase() === trimmedName.toLowerCase()
-      );
-
-      if (existing) {
-        if (supplierId) existing.supplierId = supplierId;
-        if (unit) existing.unit = unit;
-        affectedStocks.push(existing);
-      } else {
-        const newItem = { id: generateUUID(), name: trimmedName, supplierId, unit };
-        state.stocks.push(newItem);
-        affectedStocks.push(newItem);
-      }
-    });
-
+  const newlyCreatedSuppliers = []; const affectedStocks = [];
+  rows.filter((row) => row.name && row.name.trim()).forEach((row) => {
+    const trimmedName = row.name.trim(); const supplierId = findOrCreateSupplierByName(row.supplier, row.email, row.phone, newlyCreatedSuppliers); const unit = formatUnit(row.unit);
+    const existing = state.stocks.find((item) => item.name.trim().toLowerCase() === trimmedName.toLowerCase());
+    if (existing) { if (supplierId) existing.supplierId = supplierId; if (unit) existing.unit = unit; affectedStocks.push(existing); } 
+    else { const newItem = { id: generateUUID(), name: trimmedName, supplierId, unit }; state.stocks.push(newItem); affectedStocks.push(newItem); }
+  });
   saveState();
-
-  if (newlyCreatedSuppliers.length) {
-    await syncToSupabase("suppliers", "upsert", { rows: newlyCreatedSuppliers.map(supplierToDb) });
-  }
-  if (affectedStocks.length) {
-    await syncToSupabase("stocks", "upsert", { rows: affectedStocks.map(stockToDb) });
-  }
-
+  if (newlyCreatedSuppliers.length) await syncToSupabase("suppliers", "upsert", { rows: newlyCreatedSuppliers.map(supplierToDb) });
+  if (affectedStocks.length) await syncToSupabase("stocks", "upsert", { rows: affectedStocks.map(stockToDb) });
   render();
 }
 
 function parseCsvText(text) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let inQuotes = false;
-
+  const rows = []; let row = []; let field = ""; let inQuotes = false;
   for (let i = 0; i < text.length; i++) {
     const char = text[i];
-    if (inQuotes) {
-      if (char === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += char;
-      }
-    } else if (char === '"') {
-      inQuotes = true;
-    } else if (char === ",") {
-      row.push(field);
-      field = "";
-    } else if (char === "\n" || char === "\r") {
-      if (char === "\r" && text[i + 1] === "\n") i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-    } else {
-      field += char;
-    }
+    if (inQuotes) { if (char === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; } } else { field += char; } } 
+    else if (char === '"') { inQuotes = true; } else if (char === ",") { row.push(field); field = ""; } 
+    else if (char === "\n" || char === "\r") { if (char === "\r" && text[i + 1] === "\n") i++; row.push(field); rows.push(row); row = []; field = ""; } 
+    else { field += char; }
   }
-  if (field.length || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
   return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 }
 
@@ -3027,223 +1509,155 @@ function mapHeaderIndexes(headerRow) {
   const indexes = {};
   headerRow.forEach((header, idx) => {
     const key = String(header).trim().toLowerCase();
-    if (key === "item name") indexes.name = idx;
-    else if (key === "supplier") indexes.supplier = idx;
-    else if (key === "unit") indexes.unit = idx;
-    else if (key === "supplier email") indexes.email = idx;
-    else if (key === "supplier phone") indexes.phone = idx;
+    if (key === "item name") indexes.name = idx; else if (key === "supplier") indexes.supplier = idx; else if (key === "unit") indexes.unit = idx; else if (key === "supplier email") indexes.email = idx; else if (key === "supplier phone") indexes.phone = idx;
   });
   return indexes;
 }
-
-function rowsFromTable(tableRows, headerIndexes) {
-  return tableRows.map((cells) => ({
-    name: cells[headerIndexes.name] ?? "",
-    supplier: headerIndexes.supplier !== undefined ? cells[headerIndexes.supplier] ?? "" : "",
-    unit: headerIndexes.unit !== undefined ? cells[headerIndexes.unit] ?? "" : "",
-    email: headerIndexes.email !== undefined ? cells[headerIndexes.email] ?? "" : "",
-    phone: headerIndexes.phone !== undefined ? cells[headerIndexes.phone] ?? "" : ""
-  }));
-}
+function rowsFromTable(tableRows, headerIndexes) { return tableRows.map((cells) => ({ name: cells[headerIndexes.name] ?? "", supplier: headerIndexes.supplier !== undefined ? cells[headerIndexes.supplier] ?? "" : "", unit: headerIndexes.unit !== undefined ? cells[headerIndexes.unit] ?? "" : "", email: headerIndexes.email !== undefined ? cells[headerIndexes.email] ?? "" : "", phone: headerIndexes.phone !== undefined ? cells[headerIndexes.phone] ?? "" : "" })); }
 
 function importFromCsvText(text) {
-  const allRows = parseCsvText(text);
-  if (!allRows.length) {
-    alert("That CSV file appears to be empty.");
-    return false;
-  }
-  const headerIndexes = mapHeaderIndexes(allRows[0]);
-  if (headerIndexes.name === undefined) {
-    alert("Could not find an 'Item Name' column in this CSV file.");
-    return false;
-  }
-  const rows = rowsFromTable(allRows.slice(1), headerIndexes);
-  applyImportedStockRows(rows);
-  return true;
+  const allRows = parseCsvText(text); if (!allRows.length) { alert("That CSV file appears to be empty."); return false; }
+  const headerIndexes = mapHeaderIndexes(allRows[0]); if (headerIndexes.name === undefined) { alert("Could not find an 'Item Name' column in this CSV file."); return false; }
+  const rows = rowsFromTable(allRows.slice(1), headerIndexes); applyImportedStockRows(rows); return true;
 }
 
 function importFromExcelHtml(text) {
-  const doc = new DOMParser().parseFromString(text, "text/html");
-  const table = doc.querySelector("table");
-  if (!table) {
-    alert("Could not read a stock table from this file. Only .xls files exported from this app are supported for import.");
-    return false;
-  }
-
-  const tableRows = [...table.querySelectorAll("tr")].map((tr) =>
-    [...tr.querySelectorAll("th,td")].map((cell) => cell.textContent.trim())
-  );
-
-  if (!tableRows.length) {
-    alert("That Excel file appears to be empty.");
-    return false;
-  }
-
-  const headerIndexes = mapHeaderIndexes(tableRows[0]);
-  if (headerIndexes.name === undefined) {
-    alert("Could not find an 'Item Name' column in this Excel file.");
-    return false;
-  }
-
-  const rows = rowsFromTable(tableRows.slice(1), headerIndexes);
-  applyImportedStockRows(rows);
-  return true;
+  const doc = new DOMParser().parseFromString(text, "text/html"); const table = doc.querySelector("table");
+  if (!table) { alert("Could not read a stock table from this file. Only .xls files exported from this app are supported for import."); return false; }
+  const tableRows = [...table.querySelectorAll("tr")].map((tr) => [...tr.querySelectorAll("th,td")].map((cell) => cell.textContent.trim()));
+  if (!tableRows.length) { alert("That Excel file appears to be empty."); return false; }
+  const headerIndexes = mapHeaderIndexes(tableRows[0]); if (headerIndexes.name === undefined) { alert("Could not find an 'Item Name' column in this Excel file."); return false; }
+  const rows = rowsFromTable(tableRows.slice(1), headerIndexes); applyImportedStockRows(rows); return true;
 }
 
 async function fullRestoreToSupabase(suppliers, stocks, orders) {
   if (!sb) return;
-  // Children-first delete, then parents-first insert, to respect foreign keys
-  // across all three tables during a full backup restore.
-  await syncToSupabase("orders", "replaceAll", { rows: [] });
-  await syncToSupabase("stocks", "replaceAll", { rows: [] });
-  await syncToSupabase("suppliers", "replaceAll", { rows: suppliers.map(supplierToDb) });
-  if (stocks.length) {
-    await syncToSupabase("stocks", "upsert", { rows: stocks.map(stockToDb) });
-  }
-  if (orders.length) {
-    await syncToSupabase("orders", "upsert", { rows: orders.map(orderToDb) });
-  }
+  await syncToSupabase("orders", "replaceAll", { rows: [] }); await syncToSupabase("stocks", "replaceAll", { rows: [] }); await syncToSupabase("suppliers", "replaceAll", { rows: suppliers.map(supplierToDb) });
+  if (stocks.length) await syncToSupabase("stocks", "upsert", { rows: stocks.map(stockToDb) });
+  if (orders.length) await syncToSupabase("orders", "upsert", { rows: orders.map(orderToDb) });
 }
 
 async function importFromJsonText(text) {
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    alert("That file is not valid JSON.");
-    return false;
-  }
-
-  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.suppliers) && !Array.isArray(parsed.stocks)) {
-    alert("That JSON file doesn't look like a shop data backup.");
-    return false;
-  }
-
-  state = {
-    suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
-    stocks: (Array.isArray(parsed.stocks) ? parsed.stocks : []).map(normalizeStockItem),
-    order: Array.isArray(parsed.order) ? parsed.order : []
-  };
-  saveState();
-  await fullRestoreToSupabase(state.suppliers, state.stocks, state.order);
-  render();
-  return true;
+  let parsed; try { parsed = JSON.parse(text); } catch { alert("That file is not valid JSON."); return false; }
+  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.suppliers) && !Array.isArray(parsed.stocks)) { alert("That JSON file doesn't look like a shop data backup."); return false; }
+  state = { suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [], stocks: (Array.isArray(parsed.stocks) ? parsed.stocks : []).map(normalizeStockItem), order: Array.isArray(parsed.order) ? parsed.order : [] };
+  saveState(); await fullRestoreToSupabase(state.suppliers, state.stocks, state.order); render(); return true;
 }
 
 if (el.importDataInput) {
   el.importDataInput.addEventListener("change", async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const fileName = file.name.toLowerCase();
-    const reader = new FileReader();
-
+    const file = event.target.files[0]; if (!file) return;
+    const fileName = file.name.toLowerCase(); const reader = new FileReader();
     reader.onload = async () => {
-      const text = reader.result;
-      let success = false;
-
-      if (fileName.endsWith(".json")) {
-        if (await showConfirm("Import Backup", "This will replace ALL current data — suppliers, stock items, and orders. This cannot be undone.", "Import", true)) {
-          success = await importFromJsonText(text);
-        }
-      } else if (fileName.endsWith(".xls")) {
-        if (await showConfirm("Import Excel", "This will add new stock items and update existing ones that match by name. Your current orders will not be affected.", "Import", false)) {
-          success = importFromExcelHtml(text);
-        }
-      } else {
-        if (await showConfirm("Import CSV", "This will add new stock items and update existing ones that match by name. Your current orders will not be affected.", "Import", false)) {
-          success = importFromCsvText(text);
-        }
-      }
-
-      if (success) alert("Import complete.");
-      el.importDataInput.value = "";
+      const text = reader.result; let success = false;
+      if (fileName.endsWith(".json")) { if (await showConfirm("Import Backup", "This will replace ALL current data — suppliers, stock items, and orders. This cannot be undone.", "Import", true)) success = await importFromJsonText(text); } 
+      else if (fileName.endsWith(".xls")) { if (await showConfirm("Import Excel", "This will add new stock items and update existing ones that match by name. Your current orders will not be affected.", "Import", false)) success = importFromExcelHtml(text); } 
+      else { if (await showConfirm("Import CSV", "This will add new stock items and update existing ones that match by name. Your current orders will not be affected.", "Import", false)) success = importFromCsvText(text); }
+      if (success) alert("Import complete."); el.importDataInput.value = "";
     };
-
-    reader.onerror = () => {
-      alert("Could not read that file. Please try again.");
-      el.importDataInput.value = "";
-    };
-
-    reader.readAsText(file);
+    reader.onerror = () => { alert("Could not read that file. Please try again."); el.importDataInput.value = ""; }; reader.readAsText(file);
   });
 }
 
 function initializeApp() {
-  renderSupplierOptions();
-  renderStockTable();
-  renderSupplierList();
-  renderBifurcatedOrders();
+  renderSupplierOptions(); renderStockTable(); renderSupplierList(); renderBifurcatedOrders();
 }
 
 initializeApp();
 
-if (location.hash) {
-  const pageId = location.hash.slice(1);
-  if (document.getElementById(pageId)) {
-    showPage(pageId);
-  }
+// Ensure there is always a valid hash on startup to build our back stack
+if (!location.hash) {
+  location.hash = "#listPage";
+} else {
+  const pageId = location.hash.slice(1).replace("-detail", "");
+  if (document.getElementById(pageId)) showPage(pageId, true);
 }
 
-// Show the locally-cached data instantly (above), then sync with Supabase
-// in the background — pushes any offline-queued changes first, then pulls
-// the latest shared data and re-renders if anything changed.
 syncOnStartup();
 
-// --- Improved Mobile Keyboard Fix: Detects actual screen resizing ---
+// --- Improved Mobile Keyboard Fix ---
 let maxViewportHeight = window.innerHeight;
-
 window.addEventListener("resize", () => {
-  // Account for device rotation by updating the max height
-  if (window.innerHeight > maxViewportHeight) {
-    maxViewportHeight = window.innerHeight;
-  }
-  
-  // If the screen height shrinks by more than 150px, the keyboard is open
-  if (window.innerHeight < maxViewportHeight - 150) {
-    document.body.classList.add("keyboard-open");
-  } else {
-    // Keyboard is closed (via back button or swipe)
-    document.body.classList.remove("keyboard-open");
-  }
+  if (window.innerHeight > maxViewportHeight) maxViewportHeight = window.innerHeight;
+  if (window.innerHeight < maxViewportHeight - 150) document.body.classList.add("keyboard-open"); 
+  else document.body.classList.remove("keyboard-open");
 });
-
-// Fallback: Also clear it if the user taps outside an input
 document.addEventListener("focusout", () => {
-  setTimeout(() => {
-    if (!document.activeElement || !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
-      document.body.classList.remove("keyboard-open");
-    }
-  }, 50);
+  setTimeout(() => { if (!document.activeElement || !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) document.body.classList.remove("keyboard-open"); }, 50);
 });
 
-// --- Mobile Edge Swipe / Back Button Handler ---
-window.addEventListener("popstate", (e) => {
-  let handled = false;
-
-  // 1. Close Order Details Deep View if it's open
-  if (el.deepView && el.deepView.style.display === "block") {
-    resetDeepSelection();
-    el.deepView.style.display = "none";
-    if (el.masterView) el.masterView.style.display = "block";
-    renderBifurcatedOrders();
-    handled = true;
-  }
-
-  // 2. Close Supplier Details Deep View if it's open
-  if (el.supplierStockDetailView && el.supplierStockDetailView.style.display === "block") {
-    closeSupplierStockDetail();
-    handled = true;
-  }
-
-  // If we closed an overlay view, stop here so we don't exit the app
-  if (handled) return;
-
-  // 3. Fallback: Handle normal tab switching if swiping on root tabs
-  if (location.hash) {
-    const pageId = location.hash.slice(1);
-    if (document.getElementById(pageId)) {
-      showPage(pageId, true);
+// --- Browser History / Android Native Back Swipe Handling ---
+window.addEventListener("popstate", () => {
+  const currentHash = location.hash;
+  
+  // If the hash doesn't end with "-detail", we just closed a deep view via the back gesture
+  if (!currentHash.endsWith("-detail")) {
+    let closedDeepView = false;
+    if (el.deepView && el.deepView.style.display === "block") {
+      resetDeepSelection();
+      el.deepView.style.display = "none";
+      if (el.masterView) el.masterView.style.display = "block";
+      renderBifurcatedOrders();
+      closedDeepView = true;
     }
+    if (el.supplierStockDetailView && el.supplierStockDetailView.style.display === "block") {
+      focusedSupplierDetailId = null;
+      el.supplierStockDetailView.style.display = "none";
+      if (el.supplierMasterView) el.supplierMasterView.style.display = "block";
+      closedDeepView = true;
+    }
+    
+    // Stop here if we closed a deep overlay, avoiding app exit
+    if (closedDeepView) return;
+  }
+
+  // Handle normal tab switching from browser history
+  const pageId = currentHash.replace("#", "").replace("-detail", "");
+  if (document.getElementById(pageId)) {
+    showPage(pageId, true);
   }
 });
+
+// --- WhatsApp-style Swipe Between Tabs ---
+let swipeStartX = 0;
+let swipeStartY = 0;
+
+if (el.appShell) {
+  el.appShell.addEventListener("touchstart", (e) => {
+    swipeStartX = e.changedTouches[0].screenX;
+    swipeStartY = e.changedTouches[0].screenY;
+  }, { passive: true });
+
+  el.appShell.addEventListener("touchend", (e) => {
+    // Disable swiping if deep views, modals, or keyboard are active
+    if (
+      document.body.classList.contains("keyboard-open") ||
+      (el.deepView && el.deepView.style.display === "block") ||
+      (el.supplierStockDetailView && el.supplierStockDetailView.style.display === "block")
+    ) { return; }
+
+    const modals = [el.confirmModal, el.alreadyInListModal, el.editStockModal, el.editSupplierModal, el.quickAddSupplierModal, el.quickAddStockItemModal, el.editQtyModal];
+    if (modals.some(m => m && m.style.display === "flex")) return;
+
+    const swipeEndX = e.changedTouches[0].screenX;
+    const swipeEndY = e.changedTouches[0].screenY;
+    const diffX = swipeStartX - swipeEndX; // Positive means swiped left
+    const diffY = Math.abs(swipeStartY - swipeEndY);
+
+    // Require distinct horizontal swipe (min 70px left/right, max 40px up/down)
+    if (Math.abs(diffX) > 70 && diffY < 40) {
+      const tabs = Array.from(el.tabButtons);
+      const currentIndex = tabs.findIndex(btn => btn.classList.contains("active"));
+      
+      if (currentIndex === -1) return;
+
+      if (diffX > 0 && currentIndex < tabs.length - 1) {
+        // Swiped Left -> Go to Next Tab
+        tabs[currentIndex + 1].click();
+      } else if (diffX < 0 && currentIndex > 0) {
+        // Swiped Right -> Go to Prev Tab
+        tabs[currentIndex - 1].click();
+      }
+    }
+  }, { passive: true });
+}
