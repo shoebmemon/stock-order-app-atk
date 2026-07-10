@@ -65,7 +65,8 @@ function orderToDb(line) {
     supplier_id: line.supplierId || null,
     quantity: Number(line.quantity) || 1,
     status: line.status || "active",
-    batch_id: line.batchId || null
+    batch_id: line.batchId || null,
+    date_completed: line.dateCompleted || null
   };
 }
 function orderFromDb(row) {
@@ -76,7 +77,8 @@ function orderFromDb(row) {
     quantity: Number(row.quantity) || 1,
     status: row.status || "active",
     dateCreated: row.created_at || getFormattedDate(),
-    batchId: row.batch_id || null
+    batchId: row.batch_id || null,
+    dateCompleted: row.date_completed || null
   };
 }
 
@@ -502,7 +504,7 @@ function toggleActiveCompletedState(supplierId, newStatus, batchId) {
     // one new, distinct batch — so sending again later creates a separate
     // entry instead of merging into the same completed group.
     const newBatchId = generateUUID();
-    const completedDate = getFormattedDate();
+    const completedDate = new Date().toISOString();
     state.order.forEach((line) => {
       if (line.supplierId === supplierId && (line.status || "active") !== "completed") {
         line.status = "completed";
@@ -619,7 +621,7 @@ function showHeaderSelection(context) {
 
 function hideHeaderSelection() {
   activeHeaderSelectionContext = null;
-  if (el.headerTitleView) el.headerTitleView.style.display = "";
+  if (el.headerTitleView) el.headerTitleView.style.display = "flex";
   if (el.headerSelectionBar) el.headerSelectionBar.style.display = "none";
   hideHeaderSelectionEditBtn();
   headerSelectedSupplierId = null;
@@ -766,6 +768,7 @@ function setupStockTableLongPress() {
       stockSelectedIds.add(row.dataset.itemId);
       row.classList.add("row-selected");
       updateStockBulkDeleteBar();
+      if (navigator.vibrate) navigator.vibrate(50);
     };
 
     let touchStartX = 0, touchStartY = 0;

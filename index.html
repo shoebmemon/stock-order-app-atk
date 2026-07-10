@@ -269,8 +269,24 @@
         -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 6v2h18V6H3zm2 3v11c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V9H5zm5 10H8v-8h2v8zm4 0h-2v-8h2v8zm1-14V3c0-.55-.45-1-1-1h-4c-.55 0-1 .45-1 1v2H4v2h16V5h-5z'/></svg>") no-repeat center;
       }
 
+      .header-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        gap: 12px;
+      }
+
+      .header-add-btn svg {
+        width: 22px;
+        height: 22px;
+      }
+
       /* Selection highlight (WhatsApp-style) — applied to whichever row/card
-         type is in an active tap-and-hold selection, instead of a checkbox. */
+         type is in an active tap-and-hold selection, instead of a checkbox.
+         The stock table's card border lives on the <tr> itself on mobile
+         (not the <td>s), so it needs its own selector to actually show. */
+      .stock-table-row.row-selected,
       .stock-table-row.row-selected td,
       .single-line-row.row-selected,
       .order-card.row-selected,
@@ -397,10 +413,10 @@
   </head>
   <body>
     <header class="app-header">
-      <div id="headerTitleView" style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 12px;">
+      <div id="headerTitleView" class="header-title-row">
         <p class="eyebrow">Stock manager</p>
-        <button id="headerAddStockBtn" type="button" class="header-icon-btn" title="Add stock item" aria-label="Add stock item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <button id="headerAddStockBtn" type="button" class="header-icon-btn header-add-btn" title="Add stock item" aria-label="Add stock item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
@@ -847,6 +863,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=61"></script>
+    <script src="app.js?v=64"></script>
   </body>
 </html>
