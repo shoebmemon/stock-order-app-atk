@@ -421,9 +421,7 @@ function showPage(pageId, fromPopState = false) {
 
   if (pageId === "orderDetailsPage") renderBifurcatedOrders();
 
-  // Route updates (use replaceState so tab tapping doesn't clutter history,
-  // and removes "-detail" safely if a deep view was abandoned via a tab click)
-if (!fromPopState) {
+  if (!fromPopState) {
     history.replaceState({ isAppOpen: true }, "", `#${pageId}`);
   }
 }
@@ -513,7 +511,7 @@ function openSupplierStockDetail(supplierId) {
   const supplier = state.suppliers.find(s => s.id === supplierId);
   if (!supplier) return;
 
-// History API - Register the overlay in the back stack
+  // History API - Register the overlay in the back stack
   history.pushState({ isAppOpen: true, isDeepView: true }, "", location.hash + "-detail");
 
   if (el.supplierMasterView) el.supplierMasterView.style.display = "none";
@@ -1199,7 +1197,7 @@ function openSupplierDeepView(supplierId, batchId) {
     renderBifurcatedOrders(); return;
   }
 
-// History API - Register the overlay in the back stack
+  // History API - Register the overlay in the back stack
   history.pushState({ isAppOpen: true, isDeepView: true }, "", location.hash + "-detail");
 
   if (el.deepViewVendorTitle) el.deepViewVendorTitle.textContent = supplier ? supplier.name : "Supplier";
@@ -1568,16 +1566,26 @@ function initializeApp() {
 
 initializeApp();
 
-// Ensure there is always a valid back-trap on startup to catch app exits
-if (!history.state || !history.state.isAppOpen) {
-  history.replaceState({ base: true }, ""); 
-  history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
+
+// --- App Startup & History Trap Initialization ---
+function initHistoryTrap() {
+  if (!history.state || !history.state.isAppOpen) {
+    history.replaceState({ base: true }, ""); 
+    history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
+  }
 }
+
+initHistoryTrap();
+// Browsers ignore history manipulation until the user interacts with the page.
+// This ensures the back-trap is solidly registered on their first screen tap.
+document.body.addEventListener("touchstart", initHistoryTrap, { once: true, passive: true });
+document.body.addEventListener("click", initHistoryTrap, { once: true, passive: true });
 
 const pageId = (location.hash || "#listPage").slice(1).replace("-detail", "");
 if (document.getElementById(pageId)) showPage(pageId, true);
 
 syncOnStartup();
+
 
 // --- Improved Mobile Keyboard Fix ---
 let maxViewportHeight = window.innerHeight;
@@ -1590,23 +1598,36 @@ document.addEventListener("focusout", () => {
   setTimeout(() => { if (!document.activeElement || !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) document.body.classList.remove("keyboard-open"); }, 50);
 });
 
+
 // --- Browser History / Android Native Back Swipe Handling ---
+let isExiting = false;
+
 window.addEventListener("popstate", async (e) => {
-  // App Exit Trap: If state has no 'isAppOpen', user swiped back from the main level
+  if (isExiting) return;
+
+  // 1. If confirm modal is open, user swiping back should simply close the modal
+  if (el.confirmModal && el.confirmModal.style.display === "flex") {
+    if (el.confirmModalCancelBtn) el.confirmModalCancelBtn.click();
+    history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
+    return;
+  }
+
+  // 2. Main App Exit Trap
   if (!e.state || !e.state.isAppOpen) {
+    // Immediate re-trap: pushes the safe state back instantly so a second swipe doesn't kill the app
+    history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
+    
     const confirmExit = await showConfirm("Quit App", "Are you sure you want to quit the app?", "Quit", true);
     if (confirmExit) {
-      history.back(); // User pressed OK -> Proceed to exit
-    } else {
-      // User cancelled exit or tapped outside -> Re-trap the back button to stay in the app
-      history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
+      isExiting = true;
+      history.go(-2); // User confirmed -> bypass the trap and natively exit
     }
     return;
   }
 
   const currentHash = location.hash;
   
-  // If the hash doesn't end with "-detail", we just closed a deep view via the back gesture
+  // 3. Close deep views via the back gesture
   if (!currentHash.endsWith("-detail")) {
     let closedDeepView = false;
     if (el.deepView && el.deepView.style.display === "block") {
@@ -1627,12 +1648,13 @@ window.addEventListener("popstate", async (e) => {
     if (closedDeepView) return;
   }
 
-  // Handle normal tab switching from browser history
-  const pageId = currentHash.replace("#", "").replace("-detail", "");
-  if (document.getElementById(pageId)) {
-    showPage(pageId, true);
+  // 4. Handle normal tab switching from browser history
+  const historyPageId = currentHash.replace("#", "").replace("-detail", "");
+  if (document.getElementById(historyPageId)) {
+    showPage(historyPageId, true);
   }
 });
+
 
 // --- High-Performance WhatsApp-style Swipe Between Tabs ---
 let swipeStartX = 0;
