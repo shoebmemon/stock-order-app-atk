@@ -277,6 +277,14 @@
         gap: 12px;
       }
 
+      .header-add-btn {
+        color: var(--muted);
+      }
+
+      .header-add-btn:hover {
+        color: var(--primary);
+      }
+
       .header-add-btn svg {
         width: 22px;
         height: 22px;
@@ -585,8 +593,9 @@
           <div class="section-heading">
             <div>
               <h2 id="stockPageTitle">Stock Details</h2>
-              <p>Your saved items. Use the + button on Order List to add new ones.</p>
+              <p>Your saved items.</p>
             </div>
+            <button type="button" id="stockPageAddItemBtn" class="primary small-action" style="flex-shrink: 0;">+ Add Item</button>
           </div>
 
           <div class="toolbar">
@@ -863,6 +872,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=65"></script>
+    <script src="app.js?v=66"></script>
   </body>
 </html>

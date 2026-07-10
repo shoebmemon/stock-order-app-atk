@@ -325,6 +325,7 @@ const el = {
 
   headerTitleView: document.querySelector("#headerTitleView"),
   headerAddStockBtn: document.querySelector("#headerAddStockBtn"),
+  stockPageAddItemBtn: document.querySelector("#stockPageAddItemBtn"),
   headerSelectionBar: document.querySelector("#headerSelectionBar"),
   headerSelectionCount: document.querySelector("#headerSelectionCount"),
   headerSelectionCancelBtn: document.querySelector("#headerSelectionCancelBtn"),
@@ -1983,6 +1984,12 @@ if (el.quickStockItemSupplierSuggestionsBox) {
 // caller field to fill back in (it's a standalone add, not part of a search).
 if (el.headerAddStockBtn) {
   el.headerAddStockBtn.addEventListener("click", () => {
+    openQuickAddStockItemModal(null, null);
+  });
+}
+
+if (el.stockPageAddItemBtn) {
+  el.stockPageAddItemBtn.addEventListener("click", () => {
     openQuickAddStockItemModal(null, null);
   });
 }
