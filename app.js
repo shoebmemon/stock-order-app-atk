@@ -678,7 +678,7 @@ if (el.headerSelectionDeleteBtn) {
   });
 }
 
-function showPage(pageId) {
+function showPage(pageId, fromPopState = false) {
   el.pages.forEach((page) => {
     const isActive = page.id === pageId;
     page.hidden = !isActive;
@@ -711,7 +711,8 @@ function showPage(pageId) {
     closeSupplierStockDetail();
   }
 
-  if (location.hash !== `#${pageId}`) {
+  // Only push state if the navigation didn't come from a back swipe
+  if (!fromPopState && location.hash !== `#${pageId}`) {
     history.replaceState(null, "", `#${pageId}`);
   }
 }
@@ -856,6 +857,9 @@ function openSupplierStockDetail(supplierId) {
   focusedSupplierDetailId = supplierId;
   const supplier = state.suppliers.find(s => s.id === supplierId);
   if (!supplier) return;
+
+  // Push history state so the Android back button can intercept it
+  history.pushState({ isDeepView: true }, "");
 
   if (el.supplierMasterView) el.supplierMasterView.style.display = "none";
   if (el.supplierStockDetailView) el.supplierStockDetailView.style.display = "block";
@@ -1148,8 +1152,11 @@ if (el.supplierList) {
   });
 }
 
+// History API link for the back button
 if (el.supplierStockBackBtn) {
-  el.supplierStockBackBtn.addEventListener("click", closeSupplierStockDetail);
+  el.supplierStockBackBtn.addEventListener("click", () => {
+    history.back();
+  });
 }
 
 if (el.supplierStockDetailList) {
@@ -2277,6 +2284,9 @@ function openSupplierDeepView(supplierId, batchId) {
     setupDeepViewLongPressTriggers(); 
   }
 
+  // Push history state so the Android back button can intercept it
+  history.pushState({ isDeepView: true }, "");
+
   if (el.masterView) el.masterView.style.display = "none";
   if (el.deepView) el.deepView.style.display = "block";
 }
@@ -2327,12 +2337,10 @@ document.addEventListener("click", async (event) => {
   }
 });
 
+// History API link for the back button
 if (el.backToMasterBtn) {
   el.backToMasterBtn.addEventListener("click", () => {
-    resetDeepSelection();
-    if (el.deepView) el.deepView.style.display = "none";
-    if (el.masterView) el.masterView.style.display = "block";
-    renderBifurcatedOrders();
+    history.back(); 
   });
 }
 
@@ -3207,4 +3215,35 @@ document.addEventListener("focusout", () => {
       document.body.classList.remove("keyboard-open");
     }
   }, 50);
+});
+
+// --- Mobile Edge Swipe / Back Button Handler ---
+window.addEventListener("popstate", (e) => {
+  let handled = false;
+
+  // 1. Close Order Details Deep View if it's open
+  if (el.deepView && el.deepView.style.display === "block") {
+    resetDeepSelection();
+    el.deepView.style.display = "none";
+    if (el.masterView) el.masterView.style.display = "block";
+    renderBifurcatedOrders();
+    handled = true;
+  }
+
+  // 2. Close Supplier Details Deep View if it's open
+  if (el.supplierStockDetailView && el.supplierStockDetailView.style.display === "block") {
+    closeSupplierStockDetail();
+    handled = true;
+  }
+
+  // If we closed an overlay view, stop here so we don't exit the app
+  if (handled) return;
+
+  // 3. Fallback: Handle normal tab switching if swiping on root tabs
+  if (location.hash) {
+    const pageId = location.hash.slice(1);
+    if (document.getElementById(pageId)) {
+      showPage(pageId, true);
+    }
+  }
 });
