@@ -276,16 +276,12 @@
         cursor: pointer;
         margin: 0 10px 0 0 !important;
         flex-shrink: 0;
-        display: inline-block !important;
+        display: none !important;
       }
-      
-      .master-multi-delete-checkbox, .multi-delete-checkbox {
-        visibility: hidden;
-        pointer-events: none;
-      }
+
       .selection-active .master-multi-delete-checkbox,
       .selection-active .multi-delete-checkbox {
-        visibility: visible;
+        display: inline-block !important;
         pointer-events: auto;
       }
 
@@ -851,6 +847,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=59"></script>
+    <script src="app.js?v=60"></script>
   </body>
 </html>
