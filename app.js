@@ -322,6 +322,7 @@ const el = {
   tabButtons: document.querySelectorAll(".tab-button"),
 
   headerTitleView: document.querySelector("#headerTitleView"),
+  headerAddStockBtn: document.querySelector("#headerAddStockBtn"),
   headerSelectionBar: document.querySelector("#headerSelectionBar"),
   headerSelectionCount: document.querySelector("#headerSelectionCount"),
   headerSelectionCancelBtn: document.querySelector("#headerSelectionCancelBtn"),
@@ -501,10 +502,12 @@ function toggleActiveCompletedState(supplierId, newStatus, batchId) {
     // one new, distinct batch — so sending again later creates a separate
     // entry instead of merging into the same completed group.
     const newBatchId = generateUUID();
+    const completedDate = getFormattedDate();
     state.order.forEach((line) => {
       if (line.supplierId === supplierId && (line.status || "active") !== "completed") {
         line.status = "completed";
         line.batchId = newBatchId;
+        line.dateCompleted = completedDate;
         changedLines.push(line);
       }
     });
@@ -529,6 +532,7 @@ function toggleActiveCompletedState(supplierId, newStatus, batchId) {
     syncToSupabase("orders", "upsert", { rows: changedLines.map(orderToDb) });
   }
 
+  resetDeepSelection();
   if (el.deepView) el.deepView.style.display = "none";
   if (el.masterView) el.masterView.style.display = "block";
   renderBifurcatedOrders();
@@ -553,6 +557,8 @@ document.querySelectorAll("[data-status-filter]").forEach((pill) => {
     if(el.pillActive) el.pillActive.classList.toggle("active", pill.id === "pillActive");
     if(el.pillCompleted) el.pillCompleted.classList.toggle("active", pill.id === "pillCompleted");
     currentStatusFilter = pill.dataset.statusFilter;
+    resetMasterSelection();
+    resetDeepSelection();
     if (el.deepView) el.deepView.style.display = "none";
     if (el.masterView) el.masterView.style.display = "block";
     renderBifurcatedOrders();
@@ -686,15 +692,17 @@ function showPage(pageId) {
     button.setAttribute("aria-current", isActive ? "page" : "false");
   });
 
-  // Leaving a page always cancels any in-progress selection
+  // Leaving a page always cancels any in-progress selection, in every
+  // context — otherwise switching tabs mid-selection and coming back left
+  // rows/cards still marked selected.
   hideHeaderSelection();
+  hideStockBulkDeleteBar();
+  resetMasterSelection();
+  resetDeepSelection();
 
   if (pageId === "orderDetailsPage") {
     if (el.deepView) el.deepView.style.display = "none";
     if (el.masterView) el.masterView.style.display = "block";
-    
-    if (el.masterView) el.masterView.classList.remove("selection-active");
-    if (el.deepView) el.deepView.classList.remove("selection-active");
     
     renderBifurcatedOrders();
   }
@@ -735,11 +743,7 @@ function renderStockTable() {
     .map((item) => `
       <tr class="stock-table-row" data-item-id="${item.id}" style="cursor: pointer; user-select: none; -webkit-user-select: none;">
         <td data-label="Item">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <input type="checkbox" class="stock-delete-checkbox" data-item-id="${item.id}"
-              style="visibility: hidden; pointer-events: none; flex-shrink: 0; width: 16px; height: 16px; accent-color: #ff3b30;" />
-            <div class="item-name">${escapeHtml(item.name)}</div>
-          </div>
+          <div class="item-name">${escapeHtml(item.name)}</div>
         </td>
         <td data-label="Supplier">${escapeHtml(supplierName(item.supplierId))}</td>
         <td data-label="Unit">${escapeHtml(item.unit || "pcs")}</td>
@@ -752,18 +756,15 @@ function renderStockTable() {
 // ---------- Stock table tap-and-hold delete ----------
 let stockTableLongPressTimer = null;
 let stockTableSelectionActive = false;
+let stockSelectedIds = new Set();
 
 function setupStockTableLongPress() {
   el.stockTable.querySelectorAll(".stock-table-row").forEach((row) => {
     const onLongPress = () => {
       stockTableSelectionActive = true;
-      el.stockTable.querySelectorAll(".stock-delete-checkbox").forEach((cb) => {
-        cb.style.visibility = "visible";
-        cb.style.pointerEvents = "auto";
-      });
       showStockBulkDeleteBar();
-      const cb = row.querySelector(".stock-delete-checkbox");
-      if (cb) cb.checked = true;
+      stockSelectedIds.add(row.dataset.itemId);
+      row.classList.add("row-selected");
       updateStockBulkDeleteBar();
     };
 
@@ -792,9 +793,16 @@ function setupStockTableLongPress() {
     row.addEventListener("click", (e) => {
       if (e.target.closest("button")) return;
       if (stockTableSelectionActive) {
-        // in selection mode, tap toggles checkbox
-        const cb = row.querySelector(".stock-delete-checkbox");
-        if (cb) { cb.checked = !cb.checked; updateStockBulkDeleteBar(); }
+        // in selection mode, tap toggles this row's highlight
+        const id = row.dataset.itemId;
+        if (stockSelectedIds.has(id)) {
+          stockSelectedIds.delete(id);
+          row.classList.remove("row-selected");
+        } else {
+          stockSelectedIds.add(id);
+          row.classList.add("row-selected");
+        }
+        updateStockBulkDeleteBar();
         return;
       }
       // single tap in normal mode: no action (ordering is done from the Order List page)
@@ -810,26 +818,31 @@ function showStockBulkDeleteBar() {
 
 function hideStockBulkDeleteBar() {
   stockTableSelectionActive = false;
+  stockSelectedIds.clear();
+  if (el.stockTable) {
+    el.stockTable.querySelectorAll(".stock-table-row.row-selected").forEach((r) => r.classList.remove("row-selected"));
+  }
   if (!el.stockBulkDeleteBar) return;
   el.stockBulkDeleteBar.style.display = "none";
-  el.stockTable.querySelectorAll(".stock-delete-checkbox").forEach((cb) => {
-    cb.checked = false;
-    cb.style.visibility = "hidden";
-    cb.style.pointerEvents = "none";
-  });
   if (el.stockBulkDeleteCount) el.stockBulkDeleteCount.textContent = "0 selected";
   hideHeaderSelection();
 }
 
 function updateStockBulkDeleteBar() {
-  const checkedBoxes = el.stockTable.querySelectorAll(".stock-delete-checkbox:checked");
-  const checked = checkedBoxes.length;
+  const checked = stockSelectedIds.size;
   const countText = `${checked} selected`;
   if (el.stockBulkDeleteCount) el.stockBulkDeleteCount.textContent = countText;
   setHeaderSelectionCount(countText);
 
+  if (checked === 0) {
+    // Nothing left selected — exit selection mode entirely, same as
+    // tapping Cancel, so the row highlight never lingers.
+    hideStockBulkDeleteBar();
+    return;
+  }
+
   if (checked === 1) {
-    showHeaderSelectionEditBtn(checkedBoxes[0].dataset.itemId);
+    showHeaderSelectionEditBtn([...stockSelectedIds][0]);
   } else {
     hideHeaderSelectionEditBtn();
   }
@@ -1246,21 +1259,24 @@ function renderBifurcatedOrders() {
       groups.get(groupKey).lines.push(line);
     });
 
+    // Sort and label by when the order was actually sent (dateCompleted),
+    // not when its items were first added to the active list — a batch can
+    // contain items added on different days, but it's completed as one
+    // action, so it should show that one completion date.
     const sortedGroups = [...groups.values()].sort((a, b) => {
-      const dateA = new Date(a.lines[0].dateCreated || 0).getTime();
-      const dateB = new Date(b.lines[0].dateCreated || 0).getTime();
+      const dateA = new Date(a.lines[0].dateCompleted || a.lines[0].dateCreated || 0).getTime();
+      const dateB = new Date(b.lines[0].dateCompleted || b.lines[0].dateCreated || 0).getTime();
       return dateB - dateA; // most recent first
     });
 
     el.bifurcatedOrderContainer.innerHTML = sortedGroups
       .map(({ supplierId: sId, batchId, lines }) => {
         const vendorLabel = supplierName(sId);
-        const dateLabel = formatDisplayDate(lines[0].dateCreated);
+        const dateLabel = formatDisplayDate(lines[0].dateCompleted || lines[0].dateCreated);
 
         return `
           <div class="single-line-row" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
             <div class="vendor-title-wrapper">
-              <input type="checkbox" class="master-multi-delete-checkbox" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}">
               <div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;">
                 <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
                 <span class="subtle" style="font-size: 0.78rem;">${escapeHtml(dateLabel)}</span>
@@ -1273,24 +1289,34 @@ function renderBifurcatedOrders() {
         `;
       }).join("");
 
-    bindMasterCheckboxListeners();
-    setupMasterLongPressTriggers(); 
+    setupMasterLongPressTriggers();
     return;
   }
 
   // Active tab: still grouped purely by supplier — items added at different
-  // times stay together as one draft until they're actually sent.
+  // times stay together as one draft until they're actually sent. Shows the
+  // most recent "added" date as a subtitle, matching the Completed rows'
+  // two-line layout so both lists have the same card height.
   const uniqueSuppliers = [...new Set(targetLines.map(line => line.supplierId))];
 
   el.bifurcatedOrderContainer.innerHTML = uniqueSuppliers
     .map((sId) => {
       const vendorLabel = supplierName(sId);
-      const sLinesCount = targetLines.filter(line => line.supplierId === sId).length;
+      const supplierLines = targetLines.filter(line => line.supplierId === sId);
+      const sLinesCount = supplierLines.length;
+      const latestDate = supplierLines.reduce((latest, line) => {
+        const t = new Date(line.dateCreated || 0).getTime();
+        return t > latest ? t : latest;
+      }, 0);
+      const dateLabel = latestDate ? formatDisplayDate(new Date(latestDate).toISOString()) : formatDisplayDate();
 
       return `
         <div class="single-line-row" data-supplier-id="${sId}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
           <div class="vendor-title-wrapper">
-            <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
+            <div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;">
+              <span class="vendor-title">${escapeHtml(vendorLabel)}</span>
+              <span class="subtle" style="font-size: 0.78rem;">Added ${escapeHtml(dateLabel)}</span>
+            </div>
           </div>
           <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;">
             <span class="badge-count">${sLinesCount} Item${sLinesCount === 1 ? '' : 's'}</span>
@@ -1298,6 +1324,17 @@ function renderBifurcatedOrders() {
         </div>
       `;
     }).join("");
+
+  setupMasterLongPressTriggers();
+}
+
+// Selected order-group keys ("supplierId::batchId"), highlighted directly
+// on their row instead of via a checkbox — same visual pattern as WhatsApp
+// message selection.
+let masterSelectedKeys = new Set();
+
+function masterRowKey(row) {
+  return `${row.dataset.supplierId}::${row.dataset.batchId || ""}`;
 }
 
 function setupMasterLongPressTriggers() {
@@ -1324,15 +1361,13 @@ function setupMasterLongPressTriggers() {
 }
 
 function startMasterLongPress(e, row) {
-  if (currentStatusFilter !== 'completed') return;
-  if (e.target.closest('.master-multi-delete-checkbox')) return;
-
   isLongPressTriggered = false;
   longPressTimer = setTimeout(() => {
     isLongPressTriggered = true;
     if (el.masterView) el.masterView.classList.add("selection-active");
-    const check = row.querySelector(".master-multi-delete-checkbox");
-    if (check) check.checked = !check.checked;
+    const key = masterRowKey(row);
+    masterSelectedKeys.add(key);
+    row.classList.add("row-selected");
     updateMasterBulkDeleteToolbarState();
     
     if (navigator.vibrate) navigator.vibrate(50); 
@@ -1343,6 +1378,15 @@ function cancelMasterLongPress() {
   if (longPressTimer) clearTimeout(longPressTimer);
 }
 
+function resetMasterSelection() {
+  masterSelectedKeys.clear();
+  if (el.bifurcatedOrderContainer) {
+    el.bifurcatedOrderContainer.querySelectorAll(".single-line-row.row-selected").forEach(r => r.classList.remove("row-selected"));
+  }
+  if (el.masterView) el.masterView.classList.remove("selection-active");
+  if (el.masterBulkDeleteToolbar) el.masterBulkDeleteToolbar.style.display = "none";
+}
+
 if (el.bifurcatedOrderContainer) {
   el.bifurcatedOrderContainer.addEventListener("click", (event) => {
     if (isLongPressTriggered) {
@@ -1350,14 +1394,17 @@ if (el.bifurcatedOrderContainer) {
       return;
     }
 
-    if (event.target.classList.contains("master-multi-delete-checkbox")) {
-      return;
-    }
-
     if (el.masterView && el.masterView.classList.contains("selection-active")) {
-      const targetCheckbox = event.target.closest(".single-line-row")?.querySelector(".master-multi-delete-checkbox");
-      if (targetCheckbox) {
-        targetCheckbox.checked = !targetCheckbox.checked;
+      const targetRow = event.target.closest(".single-line-row");
+      if (targetRow) {
+        const key = masterRowKey(targetRow);
+        if (masterSelectedKeys.has(key)) {
+          masterSelectedKeys.delete(key);
+          targetRow.classList.remove("row-selected");
+        } else {
+          masterSelectedKeys.add(key);
+          targetRow.classList.add("row-selected");
+        }
         updateMasterBulkDeleteToolbarState();
       }
       return;
@@ -1368,6 +1415,10 @@ if (el.bifurcatedOrderContainer) {
     openSupplierDeepView(targetRow.dataset.supplierId, targetRow.dataset.batchId);
   });
 }
+
+// Selected order-line ids within the currently open supplier detail view,
+// highlighted directly on their card instead of via a checkbox.
+let deepSelectedIds = new Set();
 
 function setupDeepViewLongPressTriggers() {
   const cards = el.deepViewLinesList.querySelectorAll(".order-card");
@@ -1394,14 +1445,14 @@ function setupDeepViewLongPressTriggers() {
 
 function startDeepLongPress(e, card) {
   if (currentStatusFilter !== 'active') return;
-  if (e.target.closest('.multi-delete-checkbox') || e.target.closest('button[data-action]')) return;
+  if (e.target.closest('button[data-action]')) return;
 
   isLongPressTriggered = false;
   longPressTimer = setTimeout(() => {
     isLongPressTriggered = true;
     if (el.deepView) el.deepView.classList.add("selection-active");
-    const check = card.querySelector(".multi-delete-checkbox");
-    if (check) check.checked = true;
+    deepSelectedIds.add(card.dataset.lineId);
+    card.classList.add("row-selected");
     updateBulkDeleteToolbarState();
     
     if (navigator.vibrate) navigator.vibrate(50);
@@ -1411,6 +1462,39 @@ function startDeepLongPress(e, card) {
 function cancelDeepLongPress() {
   if (longPressTimer) clearTimeout(longPressTimer);
 }
+
+function resetDeepSelection() {
+  deepSelectedIds.clear();
+  if (el.deepViewLinesList) {
+    el.deepViewLinesList.querySelectorAll(".order-card.row-selected").forEach(c => c.classList.remove("row-selected"));
+  }
+  if (el.deepView) el.deepView.classList.remove("selection-active");
+  if (el.bulkDeleteToolbar) el.bulkDeleteToolbar.style.display = "none";
+}
+
+if (el.deepViewLinesList) {
+  el.deepViewLinesList.addEventListener("click", (event) => {
+    if (isLongPressTriggered) {
+      isLongPressTriggered = false;
+      return;
+    }
+    if (!el.deepView || !el.deepView.classList.contains("selection-active")) return;
+
+    const card = event.target.closest(".order-card");
+    if (!card) return;
+    const lineId = card.dataset.lineId;
+    if (deepSelectedIds.has(lineId)) {
+      deepSelectedIds.delete(lineId);
+      card.classList.remove("row-selected");
+    } else {
+      deepSelectedIds.add(lineId);
+      card.classList.add("row-selected");
+    }
+    updateBulkDeleteToolbarState();
+  });
+}
+
+
 
 // ---------- Quantity modal (dual mode: add-to-order or edit-existing-line) ----------
 let editingQtyLineId = null;   // set when editing an existing line
@@ -1850,6 +1934,14 @@ if (el.quickStockItemSupplierSuggestionsBox) {
   });
 }
 
+// Header + button: opens the add-stock-item modal from any page, with no
+// caller field to fill back in (it's a standalone add, not part of a search).
+if (el.headerAddStockBtn) {
+  el.headerAddStockBtn.addEventListener("click", () => {
+    openQuickAddStockItemModal(null, null);
+  });
+}
+
 // Wire the + button next to "Search & Select Stock Item" on the Order List page
 if (el.quickAddStockItemBtn) {
   el.quickAddStockItemBtn.addEventListener("click", () => {
@@ -2054,18 +2146,10 @@ if (el.editQtyModal) {
   });
 }
 
-function bindMasterCheckboxListeners() {
-  const checkboxes = el.bifurcatedOrderContainer.querySelectorAll(".master-multi-delete-checkbox");
-  checkboxes.forEach(box => {
-    box.addEventListener("change", updateMasterBulkDeleteToolbarState);
-  });
-}
-
 function updateMasterBulkDeleteToolbarState() {
-  const selectedBoxes = el.bifurcatedOrderContainer.querySelectorAll(".master-multi-delete-checkbox:checked");
-  const count = selectedBoxes.length;
+  const count = masterSelectedKeys.size;
 
-  if (count > 0 && currentStatusFilter === "completed") {
+  if (count > 0) {
     const countText = `${count} order${count === 1 ? "" : "s"} selected`;
     el.masterBulkDeleteCountLabel.textContent = countText;
     el.masterBulkDeleteToolbar.style.display = "flex";
@@ -2098,7 +2182,9 @@ function openSupplierDeepView(supplierId, batchId) {
 
   if (el.deepViewVendorTitle) el.deepViewVendorTitle.textContent = supplier ? supplier.name : "Supplier";
   
-  const dateStr = formatDisplayDate(filteredLines[0].dateCreated);
+  const dateStr = currentStatusFilter === "completed"
+    ? formatDisplayDate(filteredLines[0].dateCompleted || filteredLines[0].dateCreated)
+    : formatDisplayDate(filteredLines[0].dateCreated);
   if (el.deepViewDateLabel) el.deepViewDateLabel.textContent = `Date: ${dateStr}`;
 
   if (el.toggleStatusStateBtn) {
@@ -2113,8 +2199,7 @@ function openSupplierDeepView(supplierId, batchId) {
     }
   }
 
-  if (el.bulkDeleteToolbar) el.bulkDeleteToolbar.style.display = "none";
-  if (el.deepView) el.deepView.classList.remove("selection-active");
+  resetDeepSelection();
   hideHeaderSelection();
 
   if (el.deepViewLinesList) {
@@ -2122,9 +2207,7 @@ function openSupplierDeepView(supplierId, batchId) {
       .map((line) => {
         const item = state.stocks.find(s => s.id === line.itemId);
         return `
-          <div class="order-card" style="background: #fff; border: 1px solid var(--line); padding: 10px; margin-bottom: 6px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; min-width: 0; gap: 10px;">
-            ${currentStatusFilter === 'active' ? `<input type="checkbox" class="multi-delete-checkbox" data-line-id="${line.id}">` : ''}
-            
+          <div class="order-card" data-line-id="${line.id}" style="background: #fff; border: 1px solid var(--line); padding: 10px; margin-bottom: 6px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; min-width: 0; gap: 10px;">
             <div style="min-width: 0; flex: 1 1 auto; margin-left: 2px; overflow: hidden;">
               <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(item?.name || "Deleted item")}</strong>
               <div class="order-meta" style="font-size: 0.85rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Qty: ${formatNumber(line.quantity)} ${escapeHtml(item?.unit || "pcs")}</div>
@@ -2139,7 +2222,6 @@ function openSupplierDeepView(supplierId, batchId) {
         `;
       }).join("");
 
-    bindCheckboxListeners();
     setupDeepViewLongPressTriggers(); 
   }
 
@@ -2147,16 +2229,8 @@ function openSupplierDeepView(supplierId, batchId) {
   if (el.deepView) el.deepView.style.display = "block";
 }
 
-function bindCheckboxListeners() {
-  const checkboxes = el.deepViewLinesList.querySelectorAll(".multi-delete-checkbox");
-  checkboxes.forEach(box => {
-    box.addEventListener("change", updateBulkDeleteToolbarState);
-  });
-}
-
 function updateBulkDeleteToolbarState() {
-  const selectedBoxes = el.deepViewLinesList.querySelectorAll(".multi-delete-checkbox:checked");
-  const count = selectedBoxes.length;
+  const count = deepSelectedIds.size;
 
   if (count > 0 && currentStatusFilter === "active") {
     const countText = `${count} item${count === 1 ? "" : "s"} selected`;
@@ -2203,6 +2277,7 @@ document.addEventListener("click", async (event) => {
 
 if (el.backToMasterBtn) {
   el.backToMasterBtn.addEventListener("click", () => {
+    resetDeepSelection();
     if (el.deepView) el.deepView.style.display = "none";
     if (el.masterView) el.masterView.style.display = "block";
     renderBifurcatedOrders();
@@ -2226,14 +2301,14 @@ if (el.toggleStatusStateBtn) {
 
 if (el.bulkDeleteExecuteBtn) {
   el.bulkDeleteExecuteBtn.addEventListener("click", async () => {
-    const selectedBoxes = el.deepViewLinesList.querySelectorAll(".multi-delete-checkbox:checked");
-    if (!selectedBoxes.length) return;
+    const count = deepSelectedIds.size;
+    if (!count) return;
 
     if (await showConfirm(
       "Delete Items",
-      `Remove these ${selectedBoxes.length} selected item${selectedBoxes.length === 1 ? "" : "s"} from your active order?`
+      `Remove these ${count} selected item${count === 1 ? "" : "s"} from your active order?`
     )) {
-      const idsToDelete = Array.from(selectedBoxes).map(box => box.dataset.lineId);
+      const idsToDelete = Array.from(deepSelectedIds);
       state.order = state.order.filter(line => !idsToDelete.includes(line.id));
       saveState();
       syncToSupabase("orders", "delete", { ids: idsToDelete });
@@ -2244,37 +2319,30 @@ if (el.bulkDeleteExecuteBtn) {
 
 if (el.bulkDeleteCancelBtn) {
   el.bulkDeleteCancelBtn.addEventListener("click", () => {
-    // Uncheck all, hide toolbar, exit selection mode
-    if (el.deepViewLinesList) {
-      el.deepViewLinesList.querySelectorAll(".multi-delete-checkbox").forEach(cb => {
-        cb.checked = false;
-      });
-    }
-    if (el.bulkDeleteToolbar) el.bulkDeleteToolbar.style.display = "none";
-    if (el.deepView) el.deepView.classList.remove("selection-active");
+    resetDeepSelection();
   });
 }
 
 if (el.masterBulkDeleteExecuteBtn) {
   el.masterBulkDeleteExecuteBtn.addEventListener("click", async () => {
-    const selectedBoxes = el.bifurcatedOrderContainer.querySelectorAll(".master-multi-delete-checkbox:checked");
-    if (!selectedBoxes.length) return;
+    const count = masterSelectedKeys.size;
+    if (!count) return;
 
+    const statusLabel = currentStatusFilter === "completed" ? "completed" : "active";
     if (await showConfirm(
-      "Delete Completed Orders",
-      `Permanently delete ${selectedBoxes.length} selected completed order${selectedBoxes.length === 1 ? "" : "s"}? This cannot be undone.`
+      currentStatusFilter === "completed" ? "Delete Completed Orders" : "Delete Active Orders",
+      `Permanently delete ${count} selected ${statusLabel} order${count === 1 ? "" : "s"}? This cannot be undone.`
     )) {
-      const pairsToDelete = new Set(
-        Array.from(selectedBoxes).map(box => `${box.dataset.supplierId}::${box.dataset.batchId || ""}`)
-      );
+      const pairsToDelete = new Set(masterSelectedKeys);
 
       const idsToDelete = state.order
-        .filter(line => line.status === "completed" && pairsToDelete.has(`${line.supplierId}::${line.batchId || ""}`))
+        .filter(line => (line.status || "active") === currentStatusFilter && pairsToDelete.has(`${line.supplierId}::${line.batchId || ""}`))
         .map(line => line.id);
 
       state.order = state.order.filter(line => !idsToDelete.includes(line.id));
       saveState();
       syncToSupabase("orders", "delete", { ids: idsToDelete });
+      resetMasterSelection();
       renderBifurcatedOrders();
     }
   });
@@ -2282,14 +2350,7 @@ if (el.masterBulkDeleteExecuteBtn) {
 
 if (el.masterBulkDeleteCancelBtn) {
   el.masterBulkDeleteCancelBtn.addEventListener("click", () => {
-    // Uncheck all, hide toolbar, exit selection mode
-    if (el.bifurcatedOrderContainer) {
-      el.bifurcatedOrderContainer.querySelectorAll(".master-multi-delete-checkbox").forEach(cb => {
-        cb.checked = false;
-      });
-    }
-    if (el.masterBulkDeleteToolbar) el.masterBulkDeleteToolbar.style.display = "none";
-    if (el.masterView) el.masterView.classList.remove("selection-active");
+    resetMasterSelection();
     if (el.masterBulkDeleteCountLabel) el.masterBulkDeleteCountLabel.textContent = "0 orders selected";
   });
 }
@@ -2513,10 +2574,8 @@ if (el.stockBulkDeleteCancelBtn) {
 
 if (el.stockBulkDeleteExecuteBtn) {
   el.stockBulkDeleteExecuteBtn.addEventListener("click", async () => {
-    const checked = el.stockTable.querySelectorAll(".stock-delete-checkbox:checked");
-    if (!checked.length) return;
-
-    const ids = Array.from(checked).map(cb => cb.dataset.itemId);
+    const ids = Array.from(stockSelectedIds);
+    if (!ids.length) return;
 
     // Check if any selected item appears in any order (active or completed)
     const blockedItems = ids.filter(id =>
