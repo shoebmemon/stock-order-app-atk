@@ -3181,3 +3181,25 @@ if (location.hash) {
 // in the background — pushes any offline-queued changes first, then pulls
 // the latest shared data and re-renders if anything changed.
 syncOnStartup();
+
+// --- Mobile Keyboard Fix: Hide bottom tab bar while typing ---
+if (typeof document !== "undefined") {
+  document.addEventListener("focusin", (e) => {
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      document.body.classList.add("keyboard-open");
+    }
+  });
+
+  document.addEventListener("focusout", (e) => {
+    const tag = e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      // Small delay prevents flickering if the user taps directly from one input to another
+      setTimeout(() => {
+        if (!document.activeElement || !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
+          document.body.classList.remove("keyboard-open");
+        }
+      }, 50);
+    }
+  });
+}

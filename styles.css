@@ -701,3 +701,10 @@ tr:last-child td {
     padding: 8px;
   }
 }
+
+/* Hide bottom tabs when keyboard is open on mobile */
+@media (max-width: 700px) {
+  body.keyboard-open .page-tabs {
+    display: none !important;
+  }
+}
