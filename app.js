@@ -611,7 +611,6 @@ function render() {
 // the page content. The header buttons proxy-click whichever underlying (now visually
 // hidden) bulk-delete controls are active, so existing confirm/delete logic keeps working.
 let activeHeaderSelectionContext = null; // "stock" | "master" | "deep" | "supplier" | null
-let headerSelectedSupplierId = null; // set when a supplier row is long-pressed (single-select only)
 
 function showHeaderSelection(context) {
   activeHeaderSelectionContext = context;
@@ -624,10 +623,7 @@ function hideHeaderSelection() {
   if (el.headerTitleView) el.headerTitleView.style.display = "flex";
   if (el.headerSelectionBar) el.headerSelectionBar.style.display = "none";
   hideHeaderSelectionEditBtn();
-  headerSelectedSupplierId = null;
-  if (el.supplierList) {
-    el.supplierList.querySelectorAll(".supplier-card-row").forEach((r) => r.classList.remove("row-selected"));
-  }
+  resetSupplierSelectionState();
 }
 
 function setHeaderSelectionCount(text) {
@@ -677,7 +673,7 @@ if (el.headerSelectionDeleteBtn) {
     if (activeHeaderSelectionContext === "stock" && el.stockBulkDeleteExecuteBtn) el.stockBulkDeleteExecuteBtn.click();
     else if (activeHeaderSelectionContext === "master" && el.masterBulkDeleteExecuteBtn) el.masterBulkDeleteExecuteBtn.click();
     else if (activeHeaderSelectionContext === "deep" && el.bulkDeleteExecuteBtn) el.bulkDeleteExecuteBtn.click();
-    else if (activeHeaderSelectionContext === "supplier" && headerSelectedSupplierId) requestDeleteSupplier(headerSelectedSupplierId);
+    else if (activeHeaderSelectionContext === "supplier" && supplierSelectedIds.size) requestDeleteSuppliers([...supplierSelectedIds]);
   });
 }
 
@@ -907,9 +903,9 @@ function closeSupplierStockDetail() {
 function renderSupplierList() {
   if (!el.supplierList) return;
 
-  // Any re-render invalidates row references — reset any in-progress header selection
+  // Any re-render invalidates row references — reset any in-progress selection
   if (activeHeaderSelectionContext === "supplier") hideHeaderSelection();
-  headerSelectedSupplierId = null;
+  else resetSupplierSelectionState();
 
   if (!state.suppliers.length) {
     el.supplierList.innerHTML = `<div class="empty">No suppliers yet. Go to Order List and tap the + button to add one.</div>`;
@@ -985,10 +981,14 @@ function handleSearchInput() {
   el.searchSuggestionsBox.style.display = "block";
 }
 
-// ---------- Supplier row tap-and-hold selection (single-select, no bulk delete) ----------
-// Long-pressing a supplier row selects just that one supplier and shows Edit/Delete in
-// the header — normal short taps still navigate into the supplier's stock detail view.
+// ---------- Supplier row tap-and-hold selection (multi-select, same pattern
+// as the Stock table) ----------
+// Long-pressing a row starts selection mode and selects that row; further
+// taps toggle other rows in/out. Exactly one selected shows Edit + Delete in
+// the header; more than one shows Delete only.
 let supplierLongPressTimer = null;
+let supplierSelectionActive = false;
+let supplierSelectedIds = new Set();
 
 function setupSupplierLongPressTriggers() {
   if (!el.supplierList) return;
@@ -1018,7 +1018,10 @@ function startSupplierLongPress(e, row) {
   isLongPressTriggered = false;
   supplierLongPressTimer = setTimeout(() => {
     isLongPressTriggered = true;
-    selectSupplierForHeader(row.dataset.supplierId, row);
+    supplierSelectionActive = true;
+    supplierSelectedIds.add(row.dataset.supplierId);
+    row.classList.add("row-selected");
+    updateSupplierHeaderSelection();
     if (navigator.vibrate) navigator.vibrate(50);
   }, LONG_PRESS_DURATION);
 }
@@ -1027,67 +1030,93 @@ function cancelSupplierLongPress() {
   if (supplierLongPressTimer) clearTimeout(supplierLongPressTimer);
 }
 
-function selectSupplierForHeader(supplierId, row) {
-  const supplier = state.suppliers.find((s) => s.id === supplierId);
-  if (!supplier) return;
+function updateSupplierHeaderSelection() {
+  const count = supplierSelectedIds.size;
 
-  headerSelectedSupplierId = supplierId;
-  el.supplierList.querySelectorAll(".supplier-card-row").forEach((r) => r.classList.remove("row-selected"));
-  const targetRow = row || el.supplierList.querySelector(`.supplier-card-row[data-supplier-id="${supplierId}"]`);
-  if (targetRow) targetRow.classList.add("row-selected");
+  if (count === 0) {
+    clearSupplierHeaderSelection();
+    return;
+  }
 
   showHeaderSelection("supplier");
-  setHeaderSelectionCount(supplier.name);
-  showHeaderSelectionEditBtn(supplierId);
+  if (count === 1) {
+    const supplier = state.suppliers.find((s) => s.id === [...supplierSelectedIds][0]);
+    setHeaderSelectionCount(supplier ? supplier.name : "1 selected");
+    showHeaderSelectionEditBtn([...supplierSelectedIds][0]);
+  } else {
+    setHeaderSelectionCount(`${count} suppliers selected`);
+    hideHeaderSelectionEditBtn();
+  }
+}
+
+function resetSupplierSelectionState() {
+  supplierSelectionActive = false;
+  supplierSelectedIds.clear();
+  if (el.supplierList) {
+    el.supplierList.querySelectorAll(".supplier-card-row.row-selected").forEach((r) => r.classList.remove("row-selected"));
+  }
 }
 
 function clearSupplierHeaderSelection() {
-  headerSelectedSupplierId = null;
-  if (el.supplierList) {
-    el.supplierList.querySelectorAll(".supplier-card-row").forEach((r) => r.classList.remove("row-selected"));
-  }
+  resetSupplierSelectionState();
+  hideHeaderSelection();
 }
 
-async function requestDeleteSupplier(id) {
-  const supplier = state.suppliers.find((s) => s.id === id);
-  if (!supplier) return;
+async function requestDeleteSuppliers(ids) {
+  if (!ids.length) return;
 
-  const supplierStockIds = state.stocks.filter((s) => s.supplierId === id).map((s) => s.id);
-  const ordersCount = supplierStockIds.filter((stockId) =>
-    state.order.some((line) => line.itemId === stockId)
-  ).length;
+  const blocked = []; // suppliers with items present in orders
+  const needsStockCleanup = []; // suppliers with stock items but no orders
+  const deletable = [];
 
-  if (ordersCount > 0) {
+  ids.forEach((id) => {
+    const supplier = state.suppliers.find((s) => s.id === id);
+    if (!supplier) return;
+    const supplierStockIds = state.stocks.filter((s) => s.supplierId === id).map((s) => s.id);
+    const inOrders = supplierStockIds.some((stockId) => state.order.some((line) => line.itemId === stockId));
+
+    if (inOrders) blocked.push(supplier.name);
+    else if (supplierStockIds.length) needsStockCleanup.push(supplier.name);
+    else deletable.push(id);
+  });
+
+  if (blocked.length || needsStockCleanup.length) {
+    const parts = [];
+    if (blocked.length) {
+      parts.push(`${blocked.join(", ")} — still ${blocked.length === 1 ? "has" : "have"} stock items present in your Active or Completed orders. Remove ${blocked.length === 1 ? "it" : "them"} from your orders first.`);
+    }
+    if (needsStockCleanup.length) {
+      parts.push(`${needsStockCleanup.join(", ")} — still ${needsStockCleanup.length === 1 ? "has" : "have"} stock items linked. Delete ${needsStockCleanup.length === 1 ? "that item" : "those items"} from Stock Details first.`);
+    }
+    const deletableNote = deletable.length
+      ? `\n\n${deletable.length} of your selected supplier${deletable.length === 1 ? "" : "s"} can be deleted now — the rest cannot yet:\n\n`
+      : "\n\nNone of the selected suppliers can be deleted yet:\n\n";
+
     await showConfirm(
-      "Cannot Delete Supplier",
-      `${ordersCount} stock item${ordersCount === 1 ? "" : "s"} from this supplier ${ordersCount === 1 ? "is" : "are"} still present in your orders.\n\nPlease remove ${ordersCount === 1 ? "it" : "them"} from your Active or Completed orders first, then delete the stock items from Stock Details, and then you can delete this supplier.`,
+      "Some Suppliers Can't Be Deleted",
+      deletableNote + parts.join("\n\n"),
       "OK",
       false
     );
-    return;
+
+    if (!deletable.length) return;
+    if (!await showConfirm(
+      "Delete Supplier" + (deletable.length === 1 ? "" : "s"),
+      `Delete ${deletable.length} supplier${deletable.length === 1 ? "" : "s"} that ${deletable.length === 1 ? "has" : "have"} no linked stock items? This cannot be undone.`
+    )) return;
+  } else {
+    if (!await showConfirm(
+      "Delete Supplier" + (deletable.length === 1 ? "" : "s"),
+      deletable.length === 1
+        ? `Delete "${state.suppliers.find((s) => s.id === deletable[0])?.name}"? This cannot be undone.`
+        : `Delete ${deletable.length} selected suppliers? This cannot be undone.`
+    )) return;
   }
 
-  if (supplierStockIds.length) {
-    await showConfirm(
-      "Cannot Delete Supplier",
-      `This supplier has ${supplierStockIds.length} stock item${supplierStockIds.length === 1 ? "" : "s"} linked to them.\n\nPlease go to Stock Details, delete ${supplierStockIds.length === 1 ? "that item" : "those items"} first, and then you can delete this supplier.`,
-      "OK",
-      false
-    );
-    return;
-  }
-
-  if (!await showConfirm(
-    "Delete Supplier",
-    `Delete "${supplier.name}"? This cannot be undone.`
-  )) return;
-
-  state.suppliers = state.suppliers.filter((s) => s.id !== id);
-  state.order = state.order.filter((line) => line.supplierId !== id);
+  state.suppliers = state.suppliers.filter((s) => !deletable.includes(s.id));
   saveState();
-  syncToSupabase("suppliers", "delete", { ids: [id] });
+  syncToSupabase("suppliers", "delete", { ids: deletable });
   clearSupplierHeaderSelection();
-  hideHeaderSelection();
   render();
 }
 
@@ -1099,9 +1128,22 @@ if (el.supplierList) {
     }
 
     const row = event.target.closest(".supplier-card-row");
-    if (row) {
-      openSupplierStockDetail(row.dataset.supplierId);
+    if (!row) return;
+
+    if (supplierSelectionActive) {
+      const id = row.dataset.supplierId;
+      if (supplierSelectedIds.has(id)) {
+        supplierSelectedIds.delete(id);
+        row.classList.remove("row-selected");
+      } else {
+        supplierSelectedIds.add(id);
+        row.classList.add("row-selected");
+      }
+      updateSupplierHeaderSelection();
+      return;
     }
+
+    openSupplierStockDetail(row.dataset.supplierId);
   });
 }
 
