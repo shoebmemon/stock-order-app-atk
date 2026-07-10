@@ -423,8 +423,8 @@ function showPage(pageId, fromPopState = false) {
 
   // Route updates (use replaceState so tab tapping doesn't clutter history,
   // and removes "-detail" safely if a deep view was abandoned via a tab click)
-  if (!fromPopState) {
-    history.replaceState(null, "", `#${pageId}`);
+if (!fromPopState) {
+    history.replaceState({ isAppOpen: true }, "", `#${pageId}`);
   }
 }
 
@@ -513,8 +513,8 @@ function openSupplierStockDetail(supplierId) {
   const supplier = state.suppliers.find(s => s.id === supplierId);
   if (!supplier) return;
 
-  // History API - Register the overlay in the back stack
-  history.pushState(null, "", location.hash + "-detail");
+// History API - Register the overlay in the back stack
+  history.pushState({ isAppOpen: true, isDeepView: true }, "", location.hash + "-detail");
 
   if (el.supplierMasterView) el.supplierMasterView.style.display = "none";
   if (el.supplierStockDetailView) el.supplierStockDetailView.style.display = "block";
@@ -1199,8 +1199,8 @@ function openSupplierDeepView(supplierId, batchId) {
     renderBifurcatedOrders(); return;
   }
 
-  // History API - Register the overlay in the back stack
-  history.pushState(null, "", location.hash + "-detail");
+// History API - Register the overlay in the back stack
+  history.pushState({ isAppOpen: true, isDeepView: true }, "", location.hash + "-detail");
 
   if (el.deepViewVendorTitle) el.deepViewVendorTitle.textContent = supplier ? supplier.name : "Supplier";
   const dateStr = currentStatusFilter === "completed" ? formatDisplayDate(filteredLines[0].dateCompleted || filteredLines[0].dateCreated) : formatDisplayDate(filteredLines[0].dateCreated);
@@ -1568,13 +1568,14 @@ function initializeApp() {
 
 initializeApp();
 
-// Ensure there is always a valid hash on startup to build our back stack
-if (!location.hash) {
-  location.hash = "#listPage";
-} else {
-  const pageId = location.hash.slice(1).replace("-detail", "");
-  if (document.getElementById(pageId)) showPage(pageId, true);
+// Ensure there is always a valid back-trap on startup to catch app exits
+if (!history.state || !history.state.isAppOpen) {
+  history.replaceState({ base: true }, ""); 
+  history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
 }
+
+const pageId = (location.hash || "#listPage").slice(1).replace("-detail", "");
+if (document.getElementById(pageId)) showPage(pageId, true);
 
 syncOnStartup();
 
@@ -1590,7 +1591,19 @@ document.addEventListener("focusout", () => {
 });
 
 // --- Browser History / Android Native Back Swipe Handling ---
-window.addEventListener("popstate", () => {
+window.addEventListener("popstate", async (e) => {
+  // App Exit Trap: If state has no 'isAppOpen', user swiped back from the main level
+  if (!e.state || !e.state.isAppOpen) {
+    const confirmExit = await showConfirm("Quit App", "Are you sure you want to quit the app?", "Quit", true);
+    if (confirmExit) {
+      history.back(); // User pressed OK -> Proceed to exit
+    } else {
+      // User cancelled exit or tapped outside -> Re-trap the back button to stay in the app
+      history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
+    }
+    return;
+  }
+
   const currentHash = location.hash;
   
   // If the hash doesn't end with "-detail", we just closed a deep view via the back gesture
