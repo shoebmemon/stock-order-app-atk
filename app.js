@@ -167,9 +167,10 @@ const el = {
   masterBulkDeleteCancelBtn: document.querySelector("#masterBulkDeleteCancelBtn"),
   masterBulkDeleteExecuteBtn: document.querySelector("#masterBulkDeleteExecuteBtn"),
   pages: document.querySelectorAll(".page"),
-  tabButtons: document.querySelectorAll(".tab-button"),
+  tabButtons: document.querySelectorAll(".tab-button:not(.tab-hidden)"),
   headerTitleView: document.querySelector("#headerTitleView"),
   headerAddStockBtn: document.querySelector("#headerAddStockBtn"),
+  headerDataBtn: document.querySelector("#headerDataBtn"),
   stockPageAddItemBtn: document.querySelector("#stockPageAddItemBtn"),
   headerSelectionBar: document.querySelector("#headerSelectionBar"),
   headerSelectionCount: document.querySelector("#headerSelectionCount"),
@@ -320,8 +321,8 @@ function buildCleanTextPayload(supplierId) {
 
 document.querySelectorAll("[data-status-filter]").forEach((pill) => {
   pill.addEventListener("click", () => {
-    if(el.pillActive) el.pillActive.classList.toggle("active", pill.id === "pillActive");
-    if(el.pillCompleted) el.pillCompleted.classList.toggle("active", pill.id === "pillCompleted");
+    if(el.pillActive) el.pillActive.classList.toggle("active", pill.dataset.statusFilter === "active");
+    if(el.pillCompleted) el.pillCompleted.classList.toggle("active", pill.dataset.statusFilter === "completed");
     currentStatusFilter = pill.dataset.statusFilter;
     resetMasterSelection(); resetDeepSelection();
     if (el.deepView) el.deepView.style.display = "none";
@@ -402,7 +403,7 @@ function showPage(pageId, fromPopState = false) {
   });
 
   el.tabButtons.forEach((button) => {
-    const isActive = button.dataset.pageTarget === pageId;
+    const isActive = button.dataset.pageTarget === pageId && (!button.dataset.statusFilter || button.dataset.statusFilter === currentStatusFilter);
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-current", isActive ? "page" : "false");
   });
@@ -1087,6 +1088,7 @@ if (el.quickStockItemSupplierSuggestionsBox) {
 }
 
 if (el.headerAddStockBtn) el.headerAddStockBtn.addEventListener("click", () => openQuickAddStockItemModal(null, null));
+if (el.headerDataBtn) el.headerDataBtn.addEventListener("click", () => showPage(el.headerDataBtn.dataset.pageTarget));
 if (el.stockPageAddItemBtn) el.stockPageAddItemBtn.addEventListener("click", () => openQuickAddStockItemModal(null, null));
 if (el.quickAddStockItemBtn) el.quickAddStockItemBtn.addEventListener("click", () => openQuickAddStockItemModal(el.orderItemSearchInput, el.hiddenOrderItemId));
 
