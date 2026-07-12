@@ -485,6 +485,8 @@ function setupStockTableLongPress() {
         else { stockSelectedIds.add(id); row.classList.add("row-selected"); }
         updateStockBulkDeleteBar(); return;
       }
+      const item = state.stocks.find((s) => s.id === row.dataset.itemId);
+      if (item) openEditStockModal(item);
     });
   });
 }

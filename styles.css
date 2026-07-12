@@ -549,6 +549,8 @@ tr:last-child td {
 
   .app-shell {
     padding: 14px 10px 26px;
+    min-height: calc(100dvh - var(--header-height-mobile) - 78px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    box-sizing: border-box;
   }
 
   .panel {
