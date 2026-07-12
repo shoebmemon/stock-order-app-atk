@@ -544,7 +544,30 @@ function renderSupplierStockDetail() {
       <span style="flex-shrink: 0; color: var(--primary); font-size: 1rem;">➕</span>
     </div>
   `).join("");
+  setupSupplierStockDetailLongPress();
 }
+
+let supplierStockDetailLongPressTimer = null;
+function setupSupplierStockDetailLongPress() {
+  if (!el.supplierStockDetailList) return;
+  el.supplierStockDetailList.querySelectorAll(".supplier-stock-item").forEach((row) => {
+    const start = () => {
+      cancelSupplierStockDetailLongPress(); isLongPressTriggered = false;
+      supplierStockDetailLongPressTimer = setTimeout(() => {
+        isLongPressTriggered = true;
+        const stock = state.stocks.find(s => s.id === row.dataset.itemId);
+        if (stock) openEditStockModal(stock);
+        if (navigator.vibrate) navigator.vibrate(50);
+      }, LONG_PRESS_DURATION);
+    };
+    row.addEventListener("mousedown", start); row.addEventListener("mouseup", cancelSupplierStockDetailLongPress); row.addEventListener("mouseleave", cancelSupplierStockDetailLongPress);
+    let touchStartX = 0, touchStartY = 0;
+    row.addEventListener("touchstart", (e) => { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; start(); }, { passive: true });
+    row.addEventListener("touchmove", (e) => { const dx = Math.abs(e.touches[0].clientX - touchStartX); const dy = Math.abs(e.touches[0].clientY - touchStartY); if (dx > 8 || dy > 8) cancelSupplierStockDetailLongPress(); }, { passive: true });
+    row.addEventListener("touchend", cancelSupplierStockDetailLongPress); row.addEventListener("touchcancel", cancelSupplierStockDetailLongPress);
+  });
+}
+function cancelSupplierStockDetailLongPress() { if (supplierStockDetailLongPressTimer) clearTimeout(supplierStockDetailLongPressTimer); }
 
 function closeSupplierStockDetail() {
   focusedSupplierDetailId = null;
@@ -671,6 +694,7 @@ if (el.supplierStockBackBtn) {
 
 if (el.supplierStockDetailList) {
   el.supplierStockDetailList.addEventListener("click", (event) => {
+    if (isLongPressTriggered) { isLongPressTriggered = false; return; }
     const item = event.target.closest(".supplier-stock-item"); if (!item) return;
     const stock = state.stocks.find(s => s.id === item.dataset.itemId); if (stock) openAddToOrderModal(stock);
   });
@@ -1618,7 +1642,9 @@ let isExiting = false;
 window.addEventListener("popstate", async (e) => {
   if (isExiting) return;
 
-  // 1. If confirm modal is open, user swiping back should simply close the modal
+  // 1. If confirm modal is open, user swiping/pressing back should simply close the modal,
+  //    not be treated as a second attempt to exit. This re-arms the trap so a rapid second
+  //    swipe while the "Quit App" dialog is up never falls through to a real exit.
   if (el.confirmModal && el.confirmModal.style.display === "flex") {
     if (el.confirmModalCancelBtn) el.confirmModalCancelBtn.click();
     history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
@@ -1629,11 +1655,23 @@ window.addEventListener("popstate", async (e) => {
   if (!e.state || !e.state.isAppOpen) {
     // Immediate re-trap: pushes the safe state back instantly so a second swipe doesn't kill the app
     history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
-    
+
     const confirmExit = await showConfirm("Quit App", "Are you sure you want to quit the app?", "Quit", true);
     if (confirmExit) {
       isExiting = true;
-      history.go(-2); // User confirmed -> bypass the trap and natively exit
+      history.go(-2); // Unwind past the base entry to trigger a real exit
+      // Fallback for hosts that allow a script to close the last remaining tab/window.
+      setTimeout(() => { try { window.close(); } catch (err) {} }, 50);
+      // Safety net: if we're still here after a beat, the navigation/close silently failed
+      // (an out-of-range history.go is a no-op per spec). Un-stick the trap so back handling
+      // keeps working instead of leaving isExiting permanently true, which would otherwise
+      // let every future back-swipe fall through uncontrolled.
+      setTimeout(() => {
+        if (document.visibilityState !== "hidden") {
+          isExiting = false;
+          history.replaceState({ isAppOpen: true }, "", location.hash || "#listPage");
+        }
+      }, 500);
     }
     return;
   }
