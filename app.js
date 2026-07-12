@@ -133,6 +133,8 @@ const el = {
   stockTable: document.querySelector("#stockTable"),
   supplierList: document.querySelector("#supplierList"),
   bifurcatedOrderContainer: document.querySelector("#bifurcatedOrderContainer"),
+  orderDetailsTitle: document.querySelector("#orderDetailsTitle"),
+  orderDetailsSubtitle: document.querySelector("#orderDetailsSubtitle"),
   orderItemSearchInput: document.querySelector("#orderItemSearchInput"),
   hiddenOrderItemId: document.querySelector("#hiddenOrderItemId"),
   searchSuggestionsBox: document.querySelector("#searchSuggestionsBox"),
@@ -727,6 +729,8 @@ function renderBifurcatedOrders() {
   hideHeaderSelection();
   el.bifurcatedOrderContainer.classList.remove("status-active", "status-completed");
   el.bifurcatedOrderContainer.classList.add(currentStatusFilter === "completed" ? "status-completed" : "status-active");
+  if (el.orderDetailsTitle) el.orderDetailsTitle.textContent = currentStatusFilter === "completed" ? "Completed" : "Active";
+  if (el.orderDetailsSubtitle) el.orderDetailsSubtitle.textContent = currentStatusFilter === "completed" ? "Your completed orders." : "Your active orders.";
   const rowIcon = currentStatusFilter === "completed"
     ? `<svg class="row-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="8.5 12.5 11 15 15.5 9.5" /></svg>`
     : `<svg class="row-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></svg>`;
