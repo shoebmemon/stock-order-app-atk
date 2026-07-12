@@ -724,6 +724,11 @@ function renderBifurcatedOrders() {
   if (el.masterBulkDeleteToolbar) el.masterBulkDeleteToolbar.style.display = "none";
   if (el.masterView) el.masterView.classList.remove("selection-active");
   hideHeaderSelection();
+  el.bifurcatedOrderContainer.classList.remove("status-active", "status-completed");
+  el.bifurcatedOrderContainer.classList.add(currentStatusFilter === "completed" ? "status-completed" : "status-active");
+  const rowIcon = currentStatusFilter === "completed"
+    ? `<svg class="row-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="8.5 12.5 11 15 15.5 9.5" /></svg>`
+    : `<svg class="row-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></svg>`;
   const targetLines = state.order.filter((line) => (line.status || "active") === currentStatusFilter);
   if (!targetLines.length) { el.bifurcatedOrderContainer.innerHTML = `<div class="empty">No ${currentStatusFilter} orders currently in register logs.</div>`; return; }
 
@@ -738,7 +743,7 @@ function renderBifurcatedOrders() {
     el.bifurcatedOrderContainer.innerHTML = sortedGroups.map(({ supplierId: sId, batchId, lines }) => {
       const vendorLabel = supplierName(sId); const dateLabel = formatDisplayDate(lines[0].dateCompleted || lines[0].dateCreated);
       return `<div class="single-line-row" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
-          <div class="vendor-title-wrapper"><div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;"><span class="vendor-title">${escapeHtml(vendorLabel)}</span><span class="subtle" style="font-size: 0.78rem;">${escapeHtml(dateLabel)}</span></div></div>
+          <div class="vendor-title-wrapper">${rowIcon}<div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;"><span class="vendor-title">${escapeHtml(vendorLabel)}</span><span class="subtle" style="font-size: 0.78rem;">${escapeHtml(dateLabel)}</span></div></div>
           <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;"><span class="badge-count">${lines.length} Item${lines.length === 1 ? '' : 's'}</span></div>
         </div>`;
     }).join("");
@@ -751,7 +756,7 @@ function renderBifurcatedOrders() {
     const sLinesCount = supplierLines.length; const latestDate = supplierLines.reduce((latest, line) => { const t = new Date(line.dateCreated || 0).getTime(); return t > latest ? t : latest; }, 0);
     const dateLabel = latestDate ? formatDisplayDate(new Date(latestDate).toISOString()) : formatDisplayDate();
     return `<div class="single-line-row" data-supplier-id="${sId}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
-        <div class="vendor-title-wrapper"><div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;"><span class="vendor-title">${escapeHtml(vendorLabel)}</span><span class="subtle" style="font-size: 0.78rem;">Added ${escapeHtml(dateLabel)}</span></div></div>
+        <div class="vendor-title-wrapper">${rowIcon}<div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;"><span class="vendor-title">${escapeHtml(vendorLabel)}</span><span class="subtle" style="font-size: 0.78rem;">Added ${escapeHtml(dateLabel)}</span></div></div>
         <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;"><span class="badge-count">${sLinesCount} Item${sLinesCount === 1 ? '' : 's'}</span></div>
       </div>`;
   }).join("");

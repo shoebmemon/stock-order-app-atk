@@ -214,6 +214,31 @@
         max-width: 90px;
       }
 
+      /* Distinct look for Active vs Completed order cards, so each list is identifiable at a glance */
+      .row-status-icon {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        margin-right: 8px;
+      }
+      #bifurcatedOrderContainer.status-active .single-line-row {
+        border-left: 4px solid var(--primary);
+      }
+      #bifurcatedOrderContainer.status-active .row-status-icon {
+        color: var(--primary);
+      }
+      #bifurcatedOrderContainer.status-completed .single-line-row {
+        border-left: 4px solid var(--ok-text);
+        background: var(--ok-bg);
+      }
+      #bifurcatedOrderContainer.status-completed .row-status-icon {
+        color: var(--ok-text);
+      }
+      #bifurcatedOrderContainer.status-completed .badge-count {
+        background: #ffffff;
+        color: var(--ok-text);
+      }
+
       /* HEADER AND ACTION STYLING OVERRIDES */
       .deep-view-header-buttons {
         display: flex !important;
