@@ -1682,12 +1682,8 @@ if (el.appShell) {
   }, { passive: true });
 
   el.appShell.addEventListener("touchend", (e) => {
-    // Prevent swiping if input keyboard, deep layout views, or contextual selection layers are active
-    if (
-      document.body.classList.contains("keyboard-open") ||
-      (el.deepView && el.deepView.style.display === "block") ||
-      (el.supplierStockDetailView && el.supplierStockDetailView.style.display === "block")
-    ) { return; }
+    // Keyboard open: skip all swipe handling
+    if (document.body.classList.contains("keyboard-open")) return;
 
     const modals = [el.confirmModal, el.alreadyInListModal, el.editStockModal, el.editSupplierModal, el.quickAddSupplierModal, el.quickAddStockItemModal, el.editQtyModal];
     if (modals.some(m => m && m.style.display === "flex")) return;
@@ -1718,6 +1714,13 @@ if (el.appShell) {
     // 2. Momentum Trigger: True if swipe clears 60px distance OR is a swift flick (>30px under 250ms)
     if (absX > absY * 2) {
       if (absX > 60 || (absX > 30 && elapsedTime < 250)) {
+
+        // Inside a deep/detail view: any horizontal swipe goes back to the list, using the same button the "Back" buttons use
+        const isOrderDeepViewOpen = el.deepView && el.deepView.style.display === "block";
+        const isSupplierDetailViewOpen = el.supplierStockDetailView && el.supplierStockDetailView.style.display === "block";
+        if (isOrderDeepViewOpen) { if (el.backToMasterBtn) el.backToMasterBtn.click(); return; }
+        if (isSupplierDetailViewOpen) { if (el.supplierStockBackBtn) el.supplierStockBackBtn.click(); return; }
+
         const tabs = Array.from(el.tabButtons);
         const currentIndex = tabs.findIndex(btn => btn.classList.contains("active"));
         if (currentIndex === -1) return;
