@@ -29,7 +29,7 @@
       }
       .modal-card {
         background: #fff;
-        border-radius: 12px;
+        border-radius: var(--card-radius);
         padding: 22px 20px;
         max-width: 320px;
         width: 100%;
@@ -163,10 +163,10 @@
       }
       .single-line-row {
         background: #ffffff;
-        border: 1px solid var(--line);
-        border-radius: 8px;
+        border: 0;
+        border-radius: 14px;
         padding: 12px 14px;
-        margin-bottom: 6px;
+        margin-bottom: 10px;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -177,6 +177,7 @@
         touch-action: pan-y;
         overflow: hidden;
         max-width: 100%;
+        box-shadow: var(--card-shadow-sm);
       }
       .single-line-row:active {
         background: var(--soft);
@@ -345,12 +346,14 @@
          The stock table's card border lives on the <tr> itself on mobile
          (not the <td>s), so it needs its own selector to actually show. */
       .stock-table-row.row-selected,
-      .stock-table-row.row-selected td,
       .single-line-row.row-selected,
       .order-card.row-selected,
       .supplier-card-row.row-selected {
         background: var(--soft) !important;
-        border-color: var(--primary) !important;
+        box-shadow: 0 0 0 2px var(--primary) !important;
+      }
+      .stock-table-row.row-selected td {
+        background: var(--soft) !important;
       }
 
       .order-card {
