@@ -219,8 +219,9 @@ h2 {
 }
 
 .tab-button.active {
-  background: var(--soft);
+  background: rgba(18, 106, 114, 0.16);
   color: var(--primary-strong);
+  font-weight: 800;
 }
 
 .app-shell {
