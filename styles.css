@@ -195,19 +195,21 @@ h2 {
 }
 
 .tab-button {
-  border: 1px solid var(--line);
-  background: #fff;
-  color: #39484d;
+  border: 0;
+  background: transparent;
+  color: #6b7a80;
   flex-direction: column;
   gap: 3px;
   padding: 9px 4px 8px;
   min-height: 56px;
   min-width: 60px;
   font-size: 0.64rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.05;
   letter-spacing: 0.01em;
   white-space: normal;
+  border-radius: 12px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .tab-icon {
@@ -217,9 +219,8 @@ h2 {
 }
 
 .tab-button.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
+  background: var(--soft);
+  color: var(--primary-strong);
 }
 
 .app-shell {
@@ -242,10 +243,10 @@ h2 {
 
 .panel {
   background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 14px;
   padding: 18px;
-  box-shadow: 0 8px 20px rgba(13, 34, 39, 0.05);
+  box-shadow: 0 1px 2px rgba(13, 34, 39, 0.04), 0 6px 16px rgba(13, 34, 39, 0.05);
 }
 
 .section-heading {
@@ -350,7 +351,9 @@ tr:last-child td {
 }
 
 .item-name {
-  font-weight: 800;
+  font-weight: 600;
+  color: #2b3538;
+  font-size: 0.96rem;
 }
 
 .subtle {
@@ -375,27 +378,35 @@ tr:last-child td {
 .supplier-list,
 .order-list {
   margin-top: 14px;
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fbfcfc;
 }
 
 .supplier-card,
 .order-card {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 12px 4px;
   display: grid;
-  gap: 7px;
-  background: #fbfcfc;
+  gap: 4px;
+  background: transparent;
 }
 
-.supplier-list {
-  grid-template-columns: 1fr;
+.supplier-card:last-child,
+.order-card:last-child {
+  border-bottom: 0;
 }
 
 .supplier-card strong,
 .order-card strong {
   display: block;
+  font-weight: 600;
+  color: #2b3538;
+  font-size: 0.96rem;
 }
 
 .supplier-meta,
@@ -527,9 +538,10 @@ tr:last-child td {
     right: 0;
     bottom: 0;
     padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--line);
-    background: rgba(245, 247, 248, 0.96);
-    box-shadow: 0 -8px 20px rgba(13, 34, 39, 0.08);
+    background: rgba(250, 251, 251, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 -1px 12px rgba(13, 34, 39, 0.06);
     transition: transform 0.12s ease-out;
   }
 
@@ -601,7 +613,9 @@ tr:last-child td {
 
   .table-wrap {
     border: 0;
-    overflow: visible;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fbfcfc;
   }
 
   table,
@@ -623,11 +637,16 @@ tr:last-child td {
   }
 
   tr {
-    margin-bottom: 10px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: #fff;
-    padding: 10px;
+    margin-bottom: 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    padding: 12px 10px;
+  }
+
+  tr:last-child {
+    border-bottom: 0;
   }
 
   td {
