@@ -146,6 +146,14 @@ select:focus-visible,
   color: #ff8a80;
 }
 
+.supplier-card-row {
+  border-bottom: 1px solid var(--line);
+}
+
+.supplier-card-row:last-child {
+  border-bottom: 0;
+}
+
 .supplier-card-row.row-selected {
   background: var(--soft);
   border-color: var(--primary);
