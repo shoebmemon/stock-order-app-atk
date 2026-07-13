@@ -538,7 +538,7 @@ tr:last-child td {
     right: 0;
     bottom: 0;
     padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-    background: rgba(250, 251, 251, 0.92);
+    background: rgba(224, 229, 230, 0.94);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     box-shadow: 0 -1px 12px rgba(13, 34, 39, 0.06);
