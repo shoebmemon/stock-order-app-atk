@@ -10,7 +10,7 @@
     <title>Shop Stock Order App</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=27" />
+    <link rel="stylesheet" href="styles.css?v=37" />
     <style>
       /* Login gate */
       .modal-overlay {
@@ -66,6 +66,10 @@
         text-align: left;
         color: var(--ink) !important;
         background: #ffffff !important;
+      }
+      .suggestion-item strong {
+        font-weight: 600;
+        font-size: 0.92rem;
       }
       .suggestion-item:last-child {
         border-bottom: 0;
@@ -165,8 +169,8 @@
         background: #ffffff;
         border: 0;
         border-radius: 14px;
-        padding: 12px 14px;
-        margin-bottom: 10px;
+        padding: 8px 12px;
+        margin-bottom: 6px;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -193,7 +197,8 @@
         overflow: hidden;
       }
       .single-line-row .vendor-title {
-        font-weight: 700;
+        font-weight: 600;
+        font-size: 0.92rem;
         color: var(--ink);
         white-space: nowrap;
         overflow: hidden;
@@ -707,7 +712,7 @@
 
           <div id="stockQuickOrderBar" class="stock-quick-order-bar" style="display: none">
             <div class="stock-quick-order-info">
-              <strong id="stockQuickOrderItemName"></strong>
+              <strong id="stockQuickOrderItemName" style="font-size: 0.92rem; font-weight: 600;"></strong>
               <span id="stockQuickOrderSupplierName" class="subtle"></span>
             </div>
             <div class="qty-input-container stock-quick-order-qty">
@@ -767,7 +772,7 @@
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
               <button id="supplierStockBackBtn" type="button" class="icon-btn" style="min-height: 36px; padding: 0 12px; font-size: 0.88rem;">← Back</button>
               <div style="flex: 1 1 0; min-width: 0;">
-                <h2 id="supplierStockDetailName" style="margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></h2>
+                <h2 id="supplierStockDetailName" style="margin: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></h2>
                 <p id="supplierStockDetailContact" class="subtle" style="margin: 0; font-size: 0.82rem;"></p>
               </div>
             </div>
@@ -846,7 +851,7 @@
         <div class="compact-form">
           <label>
             <span>Item Name<span style="color: var(--danger);">*</span></span>
-            <input type="text" id="quickStockItemName" autocomplete="off" placeholder="e.g. Basmati Rice 5kg" />
+            <input type="text" id="quickStockItemName" autocomplete="off" placeholder="e.g. Basmati Rice 5kg" style="font-size: 0.92rem; font-weight: 600;" />
           </label>
           <label>
             <span>Unit<span style="color: var(--danger);">*</span></span>
@@ -866,7 +871,7 @@
             <div class="compact-form">
               <label>
                 <span>New Supplier Name<span style="color: var(--danger);">*</span></span>
-                <input type="text" id="quickStockItemNewSupplierName" autocomplete="off" placeholder="e.g. Sunrise Traders" />
+                <input type="text" id="quickStockItemNewSupplierName" autocomplete="off" placeholder="e.g. Sunrise Traders" style="font-size: 0.92rem; font-weight: 600;" />
               </label>
               <!-- Email feature disabled for now; re-enable by removing style="display:none" -->
               <label style="display: none;">
@@ -894,7 +899,7 @@
         <div class="compact-form">
           <label>
             Item Name
-            <input type="text" id="editStockName" autocomplete="off" required placeholder="e.g. Basmati Rice 5kg" />
+            <input type="text" id="editStockName" autocomplete="off" required placeholder="e.g. Basmati Rice 5kg" style="font-size: 0.92rem; font-weight: 600;" />
           </label>
           <label>
             Unit
@@ -924,7 +929,7 @@
         <div class="compact-form">
           <label>
             Supplier Name
-            <input type="text" id="editSupplierName" autocomplete="off" required placeholder="e.g. Sunrise Traders" />
+            <input type="text" id="editSupplierName" autocomplete="off" required placeholder="e.g. Sunrise Traders" style="font-size: 0.92rem; font-weight: 600;" />
           </label>
           <!-- Email feature disabled for now; re-enable by removing style="display:none" -->
           <label style="display: none;">
@@ -971,6 +976,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=66"></script>
+    <script src="app.js?v=77"></script>
   </body>
 </html>
