@@ -10,7 +10,7 @@
     <title>Shop Stock Order App</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=41" />
+    <link rel="stylesheet" href="styles.css?v=42" />
     <style>
       /* Login gate */
       .modal-overlay {
@@ -83,54 +83,6 @@
         color: var(--muted);
         display: block;
         margin-top: 2px;
-      }
-
-      /* Optimized compact mobile rows override for 1500+ stocks */
-      @media (max-width: 700px) {
-        #stockTable tr {
-          display: flex !important;
-          flex-direction: row !important;
-          align-items: center !important;
-          justify-content: space-between !important;
-          padding: 8px 10px !important;
-          margin-bottom: 4px !important;
-          gap: 4px !important;
-        }
-        #stockTable td {
-          display: block !important;
-          padding: 2px 0 !important;
-          grid-template-columns: none !important;
-          gap: 0 !important;
-          width: auto !important;
-        }
-        #stockTable td::before {
-          display: none !important;
-        }
-        #stockTable td[data-label="Item"] {
-          flex: 1;
-          min-width: 0;
-          padding-right: 8px !important;
-          text-align: left !important;
-        }
-        #stockTable td[data-label="Supplier"],
-        #stockTable td[data-label="Unit"] {
-          display: none !important;
-        }
-        #stockTable td[data-label="Actions"] {
-          flex: 0 0 auto;
-        }
-        #stockTable .row-actions {
-          gap: 6px !important;
-        }
-        #stockTable .mini-icon-btn {
-          min-width: 34px !important;
-          min-height: 34px !important;
-          padding: 0 !important;
-          font-size: 0.95rem !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-        }
       }
 
       /* Styles for Active/Completed Order Categories Filter Button Layouts */
@@ -661,18 +613,7 @@
             </div>
           </div>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>Supplier</th>
-                  <th>Unit</th>
-                </tr>
-              </thead>
-              <tbody id="stockTable"></tbody>
-            </table>
-          </div>
+          <div id="stockTable" class="wa-list"></div>
         </div>
       </section>
 
@@ -905,6 +846,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=81"></script>
+    <script src="app.js?v=82"></script>
   </body>
 </html>
