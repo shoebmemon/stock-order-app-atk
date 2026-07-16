@@ -144,8 +144,6 @@ const el = {
   hiddenOrderItemId: document.querySelector("#hiddenOrderItemId"),
   searchSuggestionsBox: document.querySelector("#searchSuggestionsBox"),
   orderQty: document.querySelector("#orderQty"),
-  supplierFilter: document.querySelector("#supplierFilter"),
-  supplierFilterSuggestionsBox: document.querySelector("#supplierFilterSuggestionsBox"),
   stockSearch: document.querySelector("#stockSearch"),
   recentOrderAlert: document.querySelector("#recentOrderAlert"),
   stockSubmitBtn: document.querySelector("#stockSubmitBtn"),
@@ -445,14 +443,11 @@ function showPage(pageId, fromPopState = false) {
 function renderSupplierOptions() { }
 
 function renderStockTable() {
-  if (!el.stockTable || !el.stockSearch || !el.supplierFilter) return;
+  if (!el.stockTable || !el.stockSearch) return;
   const query = el.stockSearch.value.trim().toLowerCase();
-  const supplierQuery = el.supplierFilter.value.trim().toLowerCase();
   const visibleStocks = state.stocks.filter((item) => {
     const sName = supplierName(item.supplierId).toLowerCase();
-    const matchesQuery = [item.name, sName].join(" ").toLowerCase().includes(query);
-    const matchesSupplier = !supplierQuery || sName.includes(supplierQuery);
-    return matchesQuery && matchesSupplier;
+    return [item.name, sName].join(" ").toLowerCase().includes(query);
   }).sort((a, b) => a.name.localeCompare(b.name));
 
   if (!visibleStocks.length) {
@@ -461,7 +456,6 @@ function renderStockTable() {
   }
   el.stockTable.innerHTML = visibleStocks.map((item) => `
       <div class="stock-table-row" data-item-id="${item.id}">
-        <div class="wa-avatar">${escapeHtml(initialsOf(item.name))}</div>
         <div class="wa-body">
           <div class="wa-text">
             <p class="wa-title">${escapeHtml(item.name)}</p>
@@ -554,7 +548,6 @@ function renderSupplierStockDetail() {
   }
   el.supplierStockDetailList.innerHTML = items.map(item => `
     <div class="supplier-stock-item" data-item-id="${item.id}">
-      <div class="wa-avatar">${escapeHtml(initialsOf(item.name))}</div>
       <div class="wa-body">
         <div class="wa-text">
           <p class="wa-title">${escapeHtml(item.name)}</p>
@@ -607,7 +600,6 @@ function renderSupplierList() {
 
   el.supplierList.innerHTML = visibleSuppliers.map((supplier) => `
         <div class="supplier-card-row" data-supplier-id="${supplier.id}">
-          <div class="wa-avatar">${escapeHtml(initialsOf(supplier.name))}</div>
           <div class="wa-body">
             <div class="wa-text">
               <p class="wa-title">${escapeHtml(supplier.name)}</p>
@@ -982,7 +974,6 @@ function openQuickAddSupplierModal(searchInput, hiddenInput) {
   if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
   if (el.stockSearchSuggestionsBox) el.stockSearchSuggestionsBox.style.display = "none";
   if (el.supplierSearchSuggestionsBox) el.supplierSearchSuggestionsBox.style.display = "none";
-  if (el.supplierFilterSuggestionsBox) el.supplierFilterSuggestionsBox.style.display = "none";
   if (el.quickStockItemSupplierSuggestionsBox) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
   if (el.searchSuggestionsBox) el.searchSuggestionsBox.style.display = "none";
 
@@ -1039,7 +1030,6 @@ function openQuickAddStockItemModal(searchInput, hiddenInput) {
   if (el.editStockSupplierSuggestionsBox) el.editStockSupplierSuggestionsBox.style.display = "none";
   if (el.stockSearchSuggestionsBox) el.stockSearchSuggestionsBox.style.display = "none";
   if (el.supplierSearchSuggestionsBox) el.supplierSearchSuggestionsBox.style.display = "none";
-  if (el.supplierFilterSuggestionsBox) el.supplierFilterSuggestionsBox.style.display = "none";
 
   const prefill = searchInput?.value.trim() || "";
   if (el.quickStockItemName) el.quickStockItemName.value = prefill;
@@ -1408,7 +1398,6 @@ document.addEventListener("click", (event) => {
   if (el.supplierSuggestionsBox && !event.target.closest(".search-suggest-container")) el.supplierSuggestionsBox.style.display = "none";
   if (el.stockSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) el.stockSearchSuggestionsBox.style.display = "none";
   if (el.supplierSearchSuggestionsBox && !event.target.closest(".search-suggest-container")) el.supplierSearchSuggestionsBox.style.display = "none";
-  if (el.supplierFilterSuggestionsBox && !event.target.closest(".search-suggest-container")) el.supplierFilterSuggestionsBox.style.display = "none";
   if (el.quickStockItemSupplierSuggestionsBox && !event.target.closest(".search-suggest-container")) el.quickStockItemSupplierSuggestionsBox.style.display = "none";
 });
 
@@ -1493,23 +1482,7 @@ if (el.stockSearch) {
   el.stockSearch.addEventListener("input", () => { renderStockTable(); handleStockSearchInput(); if (!el.stockSearch.value.trim()) clearQuickOrderBar(); });
   el.stockSearch.addEventListener("focus", handleStockSearchInput);
 }
-if (el.supplierFilter) {
-  const showSupplierFilterSuggestions = () => {
-    if (!el.supplierFilterSuggestionsBox) return;
-    const query = el.supplierFilter.value.trim().toLowerCase();
-    const matches = (query ? state.suppliers.filter(s => s.name.toLowerCase().includes(query)) : [...state.suppliers]).sort((a, b) => a.name.localeCompare(b.name));
-    if (!matches.length) { el.supplierFilterSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No suppliers match</div>`; } 
-    else {
-      const allOption = `<div class="suggestion-item" data-name="" style="color:var(--muted);">Show all suppliers</div>`;
-      el.supplierFilterSuggestionsBox.innerHTML = allOption + matches.map(s => `<div class="suggestion-item" data-name="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong></div>`).join("");
-    }
-    el.supplierFilterSuggestionsBox.style.display = "block";
-  };
-  el.supplierFilter.addEventListener("input", () => { showSupplierFilterSuggestions(); renderStockTable(); });
-  el.supplierFilter.addEventListener("focus", showSupplierFilterSuggestions);
-}
 
-if (el.supplierFilterSuggestionsBox) el.supplierFilterSuggestionsBox.addEventListener("mousedown", (event) => { const item = event.target.closest(".suggestion-item"); if (!item) return; event.preventDefault(); el.supplierFilter.value = item.dataset.name || ""; el.supplierFilterSuggestionsBox.style.display = "none"; renderStockTable(); });
 if (el.stockSearchSuggestionsBox) el.stockSearchSuggestionsBox.addEventListener("mousedown", (event) => { const suggestionItem = event.target.closest(".suggestion-item"); if (!suggestionItem || !suggestionItem.dataset.id) return; event.preventDefault(); if (el.stockSearch) el.stockSearch.value = suggestionItem.dataset.name || ""; el.stockSearchSuggestionsBox.style.display = "none"; renderStockTable(); });
 
 if (el.stockQuickOrderAddBtn) {
