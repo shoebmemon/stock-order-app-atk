@@ -149,10 +149,137 @@ select:focus-visible,
   color: #ff8a80;
 }
 
-.supplier-card-row.row-selected {
-  background: var(--soft);
-  box-shadow: 0 0 0 2px var(--primary), var(--card-shadow-sm);
+.wa-list {
+  margin-top: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius);
+  overflow: hidden;
 }
+
+.supplier-card-row,
+.single-line-row,
+.order-card,
+.supplier-stock-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--panel);
+}
+
+.supplier-card-row:active,
+.single-line-row:active,
+.order-card:active,
+.supplier-stock-item:active {
+  background: var(--soft);
+}
+
+.supplier-card-row.row-selected,
+.single-line-row.row-selected,
+.order-card.row-selected,
+.supplier-stock-item.row-selected {
+  background: var(--soft);
+  box-shadow: 0 0 0 2px var(--primary) inset;
+}
+
+.wa-avatar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #fff;
+  background: var(--primary);
+  overflow: hidden;
+}
+
+.wa-avatar svg {
+  width: 22px;
+  height: 22px;
+}
+
+.wa-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.wa-list .supplier-card-row:last-child .wa-body,
+.wa-list .single-line-row:last-child .wa-body,
+.wa-list .order-card:last-child .wa-body,
+.wa-list .supplier-stock-item:last-child .wa-body {
+  border-bottom: 0;
+}
+
+.wa-text {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wa-title {
+  font-weight: 600;
+  font-size: 0.94rem;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 0 2px;
+}
+
+.wa-subtitle {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wa-meta {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.wa-meta-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.wa-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wa-list.status-completed .wa-avatar {
+  background: var(--ok-text);
+}
+
 
 .bulk-delete-bar {
   display: none !important;
@@ -316,9 +443,9 @@ select {
 
 .table-wrap {
   overflow-x: auto;
-  border: 0;
+  border: 1px solid var(--line);
   border-radius: var(--card-radius);
-  box-shadow: var(--card-shadow-sm);
+  box-shadow: none;
 }
 
 table {
@@ -376,45 +503,6 @@ tr:last-child td {
   padding: 0 10px;
   border: 1px solid var(--line);
   background: #fff;
-}
-
-.supplier-list,
-.order-list {
-  margin-top: 8px;
-  display: grid;
-  gap: 8px;
-}
-
-.supplier-card,
-.order-card {
-  border: 0;
-  border-radius: 14px;
-  padding: 12px;
-  display: grid;
-  gap: 7px;
-  background: #ffffff;
-  box-shadow: var(--card-shadow-sm);
-}
-
-.supplier-list {
-  grid-template-columns: 1fr;
-}
-
-.supplier-card strong,
-.order-card strong {
-  display: block;
-}
-
-.supplier-meta,
-.order-meta {
-  color: var(--muted);
-  font-size: 0.86rem;
-  line-height: 1.35;
-}
-
-.order-card {
-  grid-template-columns: 1fr auto;
-  align-items: center;
 }
 
 .order-panel {
@@ -586,18 +674,6 @@ tr:last-child td {
     flex: 1 1 150px;
   }
 
-  .order-card {
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-  }
-
-  .order-card .icon-btn {
-    width: auto;
-    min-width: 74px;
-    min-height: 36px;
-    padding: 0 10px;
-  }
-
   .section-heading {
     flex-direction: column;
   }
@@ -636,16 +712,22 @@ tr:last-child td {
     background: transparent;
   }
 
+  tbody {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
   thead {
     display: none;
   }
 
   tr {
-    margin-bottom: 12px;
+    margin-bottom: 0;
     border: 0;
-    border-radius: 14px;
-    background: #fff;
-    padding: 10px;
+    border-radius: 18px;
+    background: var(--panel);
+    padding: 14px 16px;
     box-shadow: var(--card-shadow-sm);
   }
 

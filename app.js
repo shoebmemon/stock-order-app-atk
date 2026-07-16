@@ -277,6 +277,13 @@ function keepSelectValue(select, value) { if (select && [...select.options].some
 function formatNumber(value) { return Number(value || 0).toLocaleString("en-IN"); }
 function formatUnit(value) { return String(value || "").trim(); }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
+
+function initialsOf(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
 function clearInlineUnitLabel() { if (el.orderQtyInlineUnit) el.orderQtyInlineUnit.textContent = ""; }
 
 function addOrUpdateOrderLine(item, qty) {
@@ -542,12 +549,15 @@ function renderSupplierStockDetail() {
     el.supplierStockDetailList.innerHTML = `<div class="empty">No stock items linked to this supplier yet.<br>Go to Order List and tap the + button to add some.</div>`; return;
   }
   el.supplierStockDetailList.innerHTML = items.map(item => `
-    <div class="supplier-stock-item" data-item-id="${item.id}" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 14px; background: #fff; margin-bottom: 10px; cursor: pointer; user-select: none; -webkit-user-select: none; overflow: hidden; box-shadow: var(--card-shadow-sm);">
-      <div style="flex: 1 1 0; min-width: 0;">
-        <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.92rem; font-weight: 600;">${escapeHtml(item.name)}</strong>
-        <span style="font-size: 0.8rem; color: var(--muted);">${escapeHtml(item.unit || "pcs")}</span>
+    <div class="supplier-stock-item" data-item-id="${item.id}">
+      <div class="wa-avatar">${escapeHtml(initialsOf(item.name))}</div>
+      <div class="wa-body">
+        <div class="wa-text">
+          <p class="wa-title">${escapeHtml(item.name)}</p>
+          <p class="wa-subtitle">${escapeHtml(item.unit || "pcs")}</p>
+        </div>
+        <div class="wa-meta"><span style="color: var(--primary); font-size: 1.1rem;">➕</span></div>
       </div>
-      <span style="flex-shrink: 0; color: var(--primary); font-size: 1rem;">➕</span>
     </div>
   `).join("");
   setupSupplierStockDetailLongPress();
@@ -592,10 +602,13 @@ function renderSupplierList() {
   if (!visibleSuppliers.length) { el.supplierList.innerHTML = `<div class="empty">No suppliers match your search.</div>`; return; }
 
   el.supplierList.innerHTML = visibleSuppliers.map((supplier) => `
-        <div class="supplier-card-row" data-supplier-id="${supplier.id}" style="display: flex; align-items: center; gap: 10px; border: 0; border-radius: 14px; padding: 8px 12px; background: #fff; margin-bottom: 6px; cursor: pointer; user-select: none; -webkit-user-select: none; overflow: hidden; box-shadow: var(--card-shadow-sm);">
-          <div style="flex: 1 1 0; min-width: 0; overflow: hidden;">
-            <strong style="font-size: 0.92rem; font-weight: 600; display: block; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(supplier.name)}</strong>
-            <div style="font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${supplier.phone ? escapeHtml(supplier.phone) : (supplier.email ? escapeHtml(supplier.email) : "No contact info")}</div>
+        <div class="supplier-card-row" data-supplier-id="${supplier.id}">
+          <div class="wa-avatar">${escapeHtml(initialsOf(supplier.name))}</div>
+          <div class="wa-body">
+            <div class="wa-text">
+              <p class="wa-title">${escapeHtml(supplier.name)}</p>
+              <p class="wa-subtitle">${supplier.phone ? escapeHtml(supplier.phone) : (supplier.email ? escapeHtml(supplier.email) : "No contact info")}</p>
+            </div>
           </div>
         </div>
       `).join("");
@@ -761,8 +774,8 @@ function renderBifurcatedOrders() {
   if (el.orderDetailsTitle) el.orderDetailsTitle.textContent = currentStatusFilter === "completed" ? "Completed" : "Active";
   if (el.orderDetailsSubtitle) el.orderDetailsSubtitle.textContent = currentStatusFilter === "completed" ? "Your completed orders." : "Your active orders.";
   const rowIcon = currentStatusFilter === "completed"
-    ? `<svg class="row-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="8.5 12.5 11 15 15.5 9.5" /></svg>`
-    : `<svg class="row-status-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></svg>`;
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="8.5 12.5 11 15 15.5 9.5" /></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></svg>`;
   const targetLines = state.order.filter((line) => (line.status || "active") === currentStatusFilter);
   if (!targetLines.length) { el.bifurcatedOrderContainer.innerHTML = `<div class="empty">No ${currentStatusFilter} orders currently in register logs.</div>`; return; }
 
@@ -776,9 +789,15 @@ function renderBifurcatedOrders() {
     const sortedGroups = [...groups.values()].sort((a, b) => new Date(b.lines[0].dateCompleted || b.lines[0].dateCreated || 0).getTime() - new Date(a.lines[0].dateCompleted || a.lines[0].dateCreated || 0).getTime());
     el.bifurcatedOrderContainer.innerHTML = sortedGroups.map(({ supplierId: sId, batchId, lines }) => {
       const vendorLabel = supplierName(sId); const dateLabel = formatDisplayDate(lines[0].dateCompleted || lines[0].dateCreated);
-      return `<div class="single-line-row" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
-          <div class="vendor-title-wrapper">${rowIcon}<div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;"><span class="vendor-title">${escapeHtml(vendorLabel)}</span><span class="subtle" style="font-size: 0.78rem;">${escapeHtml(dateLabel)}</span></div></div>
-          <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;"><span class="badge-count">${lines.length} Item${lines.length === 1 ? '' : 's'}</span></div>
+      return `<div class="single-line-row" data-supplier-id="${sId}" data-batch-id="${escapeHtml(batchId)}">
+          <div class="wa-avatar">${rowIcon}</div>
+          <div class="wa-body">
+            <div class="wa-text">
+              <p class="wa-title">${escapeHtml(vendorLabel)}</p>
+              <p class="wa-subtitle">${escapeHtml(dateLabel)}</p>
+            </div>
+            <div class="wa-meta"><span class="wa-badge">${lines.length}</span></div>
+          </div>
         </div>`;
     }).join("");
     setupMasterLongPressTriggers(); return;
@@ -789,9 +808,15 @@ function renderBifurcatedOrders() {
     const vendorLabel = supplierName(sId); const supplierLines = targetLines.filter(line => line.supplierId === sId);
     const sLinesCount = supplierLines.length; const latestDate = supplierLines.reduce((latest, line) => { const t = new Date(line.dateCreated || 0).getTime(); return t > latest ? t : latest; }, 0);
     const dateLabel = latestDate ? formatDisplayDate(new Date(latestDate).toISOString()) : formatDisplayDate();
-    return `<div class="single-line-row" data-supplier-id="${sId}" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0;">
-        <div class="vendor-title-wrapper">${rowIcon}<div style="display: flex; flex-direction: column; min-width: 0; overflow: hidden;"><span class="vendor-title">${escapeHtml(vendorLabel)}</span><span class="subtle" style="font-size: 0.78rem;">Added ${escapeHtml(dateLabel)}</span></div></div>
-        <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0; min-width: 0;"><span class="badge-count">${sLinesCount} Item${sLinesCount === 1 ? '' : 's'}</span></div>
+    return `<div class="single-line-row" data-supplier-id="${sId}">
+        <div class="wa-avatar">${rowIcon}</div>
+        <div class="wa-body">
+          <div class="wa-text">
+            <p class="wa-title">${escapeHtml(vendorLabel)}</p>
+            <p class="wa-subtitle">Added ${escapeHtml(dateLabel)}</p>
+          </div>
+          <div class="wa-meta"><span class="wa-badge">${sLinesCount}</span></div>
+        </div>
       </div>`;
   }).join("");
   setupMasterLongPressTriggers();
@@ -1261,12 +1286,15 @@ function openSupplierDeepView(supplierId, batchId) {
   if (el.deepViewLinesList) {
     el.deepViewLinesList.innerHTML = filteredLines.map((line) => {
       const item = state.stocks.find(s => s.id === line.itemId);
-      return `<div class="order-card" data-line-id="${line.id}" style="background: #fff; border: 0; padding: 10px; margin-bottom: 10px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; min-width: 0; gap: 10px; box-shadow: var(--card-shadow-sm);">
-          <div style="min-width: 0; flex: 1 1 auto; margin-left: 2px; overflow: hidden;">
-            <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.92rem; font-weight: 600;">${escapeHtml(item?.name || "Deleted item")}</strong>
-            <div class="order-meta" style="font-size: 0.85rem; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Qty: ${formatNumber(line.quantity)} ${escapeHtml(item?.unit || "pcs")}</div>
+      return `<div class="order-card" data-line-id="${line.id}">
+          <div class="wa-avatar">${escapeHtml(initialsOf(item?.name || "?"))}</div>
+          <div class="wa-body">
+            <div class="wa-text">
+              <p class="wa-title">${escapeHtml(item?.name || "Deleted item")}</p>
+              <p class="wa-subtitle">Qty: ${formatNumber(line.quantity)} ${escapeHtml(item?.unit || "pcs")}</p>
+            </div>
+            ${currentStatusFilter === 'active' ? `<div class="wa-meta"><button class="icon-btn" type="button" data-action="edit-deep-line" data-line-id="${line.id}" title="Edit quantity" style="min-width: 32px; min-height: 32px; height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 6px; border: 1px solid var(--line); background:#fff; font-size: 15px;">✏️</button></div>` : ''}
           </div>
-          ${currentStatusFilter === 'active' ? `<button class="icon-btn" type="button" data-action="edit-deep-line" data-line-id="${line.id}" title="Edit quantity" style="min-width: 32px; min-height: 32px; height: 32px; width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 6px; border: 1px solid var(--line); background:#fff; font-size: 15px;">✏️</button>` : ''}
         </div>`;
     }).join("");
     setupDeepViewLongPressTriggers(); 

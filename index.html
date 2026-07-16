@@ -10,7 +10,7 @@
     <title>Shop Stock Order App</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=37" />
+    <link rel="stylesheet" href="styles.css?v=41" />
     <style>
       /* Login gate */
       .modal-overlay {
@@ -165,87 +165,16 @@
         border-color: var(--primary);
         color: #ffffff;
       }
-      .single-line-row {
-        background: #ffffff;
-        border: 0;
-        border-radius: 14px;
-        padding: 8px 12px;
-        margin-bottom: 6px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-        -webkit-tap-highlight-color: transparent;
-        -webkit-user-select: none;
-        user-select: none;
-        touch-action: pan-y;
-        overflow: hidden;
-        max-width: 100%;
-        box-shadow: var(--card-shadow-sm);
-      }
-      .single-line-row:active {
-        background: var(--soft);
-      }
-      
-      /* FIXED: Flexible layout container that holds items securely when checkboxes appear */
-      .single-line-row .vendor-title-wrapper {
-        display: flex;
-        align-items: center;
-        min-width: 0;
-        flex: 1 1 auto;
-        padding-right: 8px;
-        overflow: hidden;
-      }
-      .single-line-row .vendor-title {
-        font-weight: 600;
-        font-size: 0.92rem;
-        color: var(--ink);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
-        flex: 1 1 auto;
-      }
       .tab-hidden {
         display: none !important;
       }
 
-      .single-line-row .badge-count {
-        background: #eef6f4;
-        color: var(--primary);
-        font-size: 0.8rem;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-weight: 700;
-        flex-shrink: 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 90px;
+      /* Distinct look for Active vs Completed order rows, so each list is identifiable at a glance */
+      .wa-list.status-completed .wa-avatar {
+        background: var(--ok-text);
       }
-
-      /* Distinct look for Active vs Completed order cards, so each list is identifiable at a glance */
-      .row-status-icon {
-        width: 18px;
-        height: 18px;
-        flex-shrink: 0;
-        margin-right: 8px;
-      }
-      #bifurcatedOrderContainer.status-active .single-line-row {
-        border-left: 4px solid var(--primary);
-      }
-      #bifurcatedOrderContainer.status-active .row-status-icon {
-        color: var(--primary);
-      }
-      #bifurcatedOrderContainer.status-completed .single-line-row {
-        border-left: 4px solid var(--ok-text);
+      .wa-list.status-completed .wa-badge {
         background: var(--ok-bg);
-      }
-      #bifurcatedOrderContainer.status-completed .row-status-icon {
-        color: var(--ok-text);
-      }
-      #bifurcatedOrderContainer.status-completed .badge-count {
-        background: #ffffff;
         color: var(--ok-text);
       }
 
@@ -654,7 +583,7 @@
               </div>
             </div>
 
-            <div id="bifurcatedOrderContainer" class="order-list"></div>
+            <div id="bifurcatedOrderContainer" class="wa-list"></div>
           </div>
 
           <div id="orderDetailsDeepView" style="display: none">
@@ -678,7 +607,7 @@
                 </div>
               </div>
 
-              <div id="deepViewLinesList" style="margin-bottom: 16px"></div>
+              <div id="deepViewLinesList" class="wa-list"></div>
 
               <div id="deepViewActionsContainer" class="order-actions">
                 <button id="deepWhatsAppBtn" class="primary small-action" type="button">Share to WhatsApp</button>
@@ -764,7 +693,7 @@
               <div id="supplierSearchSuggestionsBox" class="search-suggestions-box"></div>
             </div>
 
-            <div id="supplierList" class="supplier-list"></div>
+            <div id="supplierList" class="wa-list"></div>
           </div>
 
           <!-- Detail view: one supplier's stock items -->
@@ -777,7 +706,7 @@
               </div>
             </div>
             <div id="supplierStockDetailHint" style="font-size: 0.82rem; color: var(--muted); margin-bottom: 10px;">Tap any item to add it to your order.</div>
-            <div id="supplierStockDetailList"></div>
+            <div id="supplierStockDetailList" class="wa-list"></div>
           </div>
 
         </div>
@@ -976,6 +905,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="app.js?v=77"></script>
+    <script src="app.js?v=81"></script>
   </body>
 </html>
