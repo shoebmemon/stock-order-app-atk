@@ -456,15 +456,19 @@ function renderStockTable() {
   }).sort((a, b) => a.name.localeCompare(b.name));
 
   if (!visibleStocks.length) {
-    el.stockTable.innerHTML = `<tr><td colspan="3" class="empty">No stock items found.</td></tr>`;
+    el.stockTable.innerHTML = `<div class="empty">No stock items found.</div>`;
     return;
   }
   el.stockTable.innerHTML = visibleStocks.map((item) => `
-      <tr class="stock-table-row" data-item-id="${item.id}" style="cursor: pointer; user-select: none; -webkit-user-select: none;">
-        <td data-label="Item"><div class="item-name">${escapeHtml(item.name)}</div></td>
-        <td data-label="Supplier">${escapeHtml(supplierName(item.supplierId))}</td>
-        <td data-label="Unit">${escapeHtml(item.unit || "pcs")}</td>
-      </tr>
+      <div class="stock-table-row" data-item-id="${item.id}">
+        <div class="wa-avatar">${escapeHtml(initialsOf(item.name))}</div>
+        <div class="wa-body">
+          <div class="wa-text">
+            <p class="wa-title">${escapeHtml(item.name)}</p>
+            <p class="wa-subtitle">${escapeHtml(supplierName(item.supplierId))} · ${escapeHtml(item.unit || "pcs")}</p>
+          </div>
+        </div>
+      </div>
     `).join("");
   setupStockTableLongPress();
 }
