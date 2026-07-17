@@ -737,10 +737,10 @@ function handleSupplierListSearch() {
 function handleStockSearchInput() {
   if (!el.stockSearch || !el.stockSearchSuggestionsBox) return;
   const query = el.stockSearch.value.trim().toLowerCase();
-  const matches = (query ? state.stocks.filter((item) => item.name.toLowerCase().includes(query) || supplierName(item.supplierId).toLowerCase().includes(query)) : [...state.stocks]).sort((a, b) => a.name.localeCompare(b.name));
   if (!state.stocks.length) { el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No stock items added yet.</div>`; el.stockSearchSuggestionsBox.style.display = "block"; return; }
-  if (!matches.length) { el.stockSearchSuggestionsBox.innerHTML = `<div class="suggestion-item" style="color:var(--muted);cursor:default;">No items match "${escapeHtml(query)}"</div>`; el.stockSearchSuggestionsBox.style.display = "block"; return; }
-  el.stockSearchSuggestionsBox.innerHTML = matches.map((item) => `<div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}"><strong>${escapeHtml(item.name)}</strong><span class="vendor-tag">${escapeHtml(supplierName(item.supplierId))}</span></div>`).join("");
+  const nameMatches = (query ? state.stocks.filter((item) => item.name.toLowerCase().includes(query)) : [...state.stocks]).sort((a, b) => a.name.localeCompare(b.name));
+  if (!nameMatches.length) { el.stockSearchSuggestionsBox.style.display = "none"; return; }
+  el.stockSearchSuggestionsBox.innerHTML = nameMatches.map((item) => `<div class="suggestion-item" data-id="${item.id}" data-name="${escapeHtml(item.name)}"><strong>${escapeHtml(item.name)}</strong><span class="vendor-tag">${escapeHtml(supplierName(item.supplierId))}</span></div>`).join("");
   el.stockSearchSuggestionsBox.style.display = "block";
 }
 
