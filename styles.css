@@ -471,6 +471,7 @@ select {
   max-width: 760px;
   margin: 0 auto;
   background: var(--soft);
+  box-shadow: none;
 }
 
 .data-panel {
@@ -483,6 +484,16 @@ select {
   margin-left: auto;
   margin-right: auto;
   background: var(--soft);
+  box-shadow: none;
+}
+
+.order-panel .wa-list,
+.inventory-panel .wa-list,
+.supplier-panel .wa-list {
+  margin-left: -18px;
+  margin-right: -18px;
+  width: auto;
+  border-radius: 0;
 }
 
 .data-panel {
@@ -622,6 +633,13 @@ select {
   .panel {
     border-radius: 14px;
     padding: 14px;
+  }
+
+  .order-panel .wa-list,
+  .inventory-panel .wa-list,
+  .supplier-panel .wa-list {
+    margin-left: -14px;
+    margin-right: -14px;
   }
 
   .form-grid {
