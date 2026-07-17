@@ -429,6 +429,7 @@ select {
   background: #fff;
   color: var(--ink);
   font-size: 16px;
+  font-weight: 500;
 }
 
 .full-row {
