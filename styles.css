@@ -740,3 +740,33 @@ select {
     transform: scale(1) translateY(0);
   }
 }
+/* "Press back again to exit" toast, replacing the old Quit App confirmation dialog */
+.exit-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%) translateY(8px);
+  background: rgba(19, 45, 52, 0.96);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 24px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  box-shadow: var(--card-shadow);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  white-space: nowrap;
+}
+
+.exit-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@media (max-width: 700px) {
+  .exit-toast {
+    bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+}

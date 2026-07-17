@@ -216,6 +216,7 @@ const el = {
   confirmModalTitle: document.querySelector("#confirmModalTitle"),
   confirmModalBody: document.querySelector("#confirmModalBody"),
   confirmModalCancelBtn: document.querySelector("#confirmModalCancelBtn"),
+  exitToast: document.querySelector("#exitToast"),
   confirmModalOkBtn: document.querySelector("#confirmModalOkBtn"),
   editStockModal: document.querySelector("#editStockModal"),
   editStockName: document.querySelector("#editStockName"),
@@ -1648,41 +1649,61 @@ document.addEventListener("focusout", () => {
 
 // --- Browser History / Android Native Back Swipe Handling ---
 let isExiting = false;
+let exitPromptActive = false;
+let exitPromptTimeout = null;
+
+function showExitToast() {
+  if (!el.exitToast) return;
+  el.exitToast.classList.add("visible");
+  clearTimeout(exitPromptTimeout);
+  exitPromptTimeout = setTimeout(() => {
+    el.exitToast.classList.remove("visible");
+    exitPromptActive = false;
+  }, 2000);
+}
 
 window.addEventListener("popstate", async (e) => {
   if (isExiting) return;
 
   // 1. If confirm modal is open, user swiping/pressing back should simply close the modal,
   //    not be treated as a second attempt to exit. This re-arms the trap so a rapid second
-  //    swipe while the "Quit App" dialog is up never falls through to a real exit.
+  //    swipe while a confirm dialog is up never falls through to a real exit.
   if (el.confirmModal && el.confirmModal.style.display === "flex") {
     if (el.confirmModalCancelBtn) el.confirmModalCancelBtn.click();
     history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
     return;
   }
 
-  // 2. Main App Exit Trap
+  // 2. Main App Exit Trap: first back-swipe shows a "press back again to exit" toast
+  //    (matching native Android app behaviour); a second swipe within 2s actually exits.
   if (!e.state || !e.state.isAppOpen) {
     // Immediate re-trap: pushes the safe state back instantly so a second swipe doesn't kill the app
     history.pushState({ isAppOpen: true }, "", location.hash || "#listPage");
 
-    const confirmExit = await showConfirm("Quit App", "Are you sure you want to quit the app?", "Quit", true);
-    if (confirmExit) {
-      isExiting = true;
-      history.go(-2); // Unwind past the base entry to trigger a real exit
-      // Fallback for hosts that allow a script to close the last remaining tab/window.
-      setTimeout(() => { try { window.close(); } catch (err) {} }, 50);
-      // Safety net: if we're still here after a beat, the navigation/close silently failed
-      // (an out-of-range history.go is a no-op per spec). Un-stick the trap so back handling
-      // keeps working instead of leaving isExiting permanently true, which would otherwise
-      // let every future back-swipe fall through uncontrolled.
-      setTimeout(() => {
-        if (document.visibilityState !== "hidden") {
-          isExiting = false;
-          history.replaceState({ isAppOpen: true }, "", location.hash || "#listPage");
-        }
-      }, 500);
+    if (!exitPromptActive) {
+      exitPromptActive = true;
+      showExitToast();
+      return;
     }
+
+    exitPromptActive = false;
+    clearTimeout(exitPromptTimeout);
+    if (el.exitToast) el.exitToast.classList.remove("visible");
+
+    isExiting = true;
+    history.go(-2); // Unwind past the base entry to trigger a real exit
+    // Fallback for hosts that allow a script to close the last remaining tab/window.
+    setTimeout(() => { try { window.close(); } catch (err) {} }, 50);
+    // Safety net: if we're still here after a beat, the navigation/close silently failed
+    // (an out-of-range history.go is a no-op per spec). Un-stick the trap so back handling
+    // keeps working instead of leaving isExiting permanently true, which would otherwise
+    // let every future back-swipe fall through uncontrolled.
+    setTimeout(() => {
+      if (document.visibilityState !== "hidden") {
+        isExiting = false;
+        history.replaceState({ isAppOpen: true }, "", location.hash || "#listPage");
+      }
+    }, 500);
     return;
   }
 
