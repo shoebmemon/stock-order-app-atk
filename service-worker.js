@@ -1,8 +1,8 @@
-const CACHE_NAME = "shop-stock-order-app-v153";
+const CACHE_NAME = "shop-stock-order-app-v154";
 const APP_ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=48",
+  "./styles.css?v=49",
   "./app.js?v=84",
   "./manifest.webmanifest",
   "./icon.svg",
