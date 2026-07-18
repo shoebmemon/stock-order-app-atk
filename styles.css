@@ -638,8 +638,8 @@ select {
   .order-panel .wa-list,
   .inventory-panel .wa-list,
   .supplier-panel .wa-list {
-    margin-left: -14px;
-    margin-right: -14px;
+    margin-left: -24px;
+    margin-right: -24px;
   }
 
   .form-grid {
