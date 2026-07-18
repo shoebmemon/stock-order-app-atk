@@ -24,6 +24,10 @@
   box-sizing: border-box;
 }
 
+html {
+  background: #132d34;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -494,9 +498,10 @@ select {
   box-shadow: none;
 }
 
-.order-panel .wa-list,
-.inventory-panel .wa-list,
-.supplier-panel .wa-list {
+#bifurcatedOrderContainer,
+#stockTable,
+#supplierList,
+#supplierStockDetailList {
   margin-left: -18px;
   margin-right: -18px;
   width: auto;
@@ -642,9 +647,10 @@ select {
     padding: 14px;
   }
 
-  .order-panel .wa-list,
-  .inventory-panel .wa-list,
-  .supplier-panel .wa-list {
+  #bifurcatedOrderContainer,
+  #stockTable,
+  #supplierList,
+  #supplierStockDetailList {
     margin-left: -24px;
     margin-right: -24px;
   }
