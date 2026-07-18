@@ -1282,7 +1282,6 @@ function openSupplierDeepView(supplierId, batchId) {
     el.deepViewLinesList.innerHTML = filteredLines.map((line) => {
       const item = state.stocks.find(s => s.id === line.itemId);
       return `<div class="order-card" data-line-id="${line.id}">
-          <div class="wa-avatar">${escapeHtml(initialsOf(item?.name || "?"))}</div>
           <div class="wa-body">
             <div class="wa-text">
               <p class="wa-title">${escapeHtml(item?.name || "Deleted item")}</p>
