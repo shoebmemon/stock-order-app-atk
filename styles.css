@@ -43,7 +43,7 @@ button,
 .file-label {
   min-height: 42px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 0 14px;
   display: inline-flex;
   align-items: center;
@@ -51,6 +51,12 @@ button,
   cursor: pointer;
   font-weight: 700;
   white-space: nowrap;
+  transition: transform 0.1s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+
+button:active,
+.file-label:active {
+  transform: scale(0.97);
 }
 
 button:focus-visible,
@@ -424,12 +430,13 @@ select {
   min-height: 42px;
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 10px;
   padding: 0 11px;
   background: #fff;
   color: var(--ink);
   font-size: 16px;
   font-weight: 500;
+  transition: border-color 0.15s ease;
 }
 
 .full-row {
